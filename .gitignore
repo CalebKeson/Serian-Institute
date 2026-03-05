@@ -1,0 +1,41 @@
+# === DEPENDENCIES ===
+# Node modules (these are huge and can be reinstalled via package.json)
+**/node_modules/
+
+# === ENVIRONMENT VARIABLES ===
+# Local environment files (contain sensitive keys, DO NOT commit)
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.production.local
+**/.env*.local
+
+# === SERVER-SIDE BUILDS/LOGS ===
+/server/build/
+/server/dist/
+/server/*.log
+/server/package-lock.json  # Optional: Often ignored in backend, but can be kept for exact installs. Vercel handles this.
+
+# === CLIENT-SIDE (React - Create React App / Vite) ===
+# Build output
+/client/build/
+/client/dist/
+
+# Cache and config files
+/client/.pnp
+/client/.pnp.js
+/client/.cache/  # (e.g., for vite)
+/client/.vite/   # (vite cache)
+
+# Misc client files
+/client/.DS_Store
+/client/*.log
+/client/package-lock.json  # Optional: Often kept, but can be ignored. Vercel uses it.
+
+# === MISC OS FILES ===
+.DS_Store
+Thumbs.db
+
+# === VERCEL ===
+# If you later generate a .vercel project folder locally, ignore it
+.vercel
