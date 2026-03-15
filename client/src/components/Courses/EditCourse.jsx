@@ -1,4 +1,4 @@
-// src/pages/Courses/EditCourse.jsx - UPDATED VERSION
+// src/pages/Courses/EditCourse.jsx - UPDATED WITH CNA
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { 
@@ -24,7 +24,8 @@ import {
   Droplets,
   Zap,
   Cpu,
-  FileText
+  FileText,
+  HeartPulse // ADD THIS for CNA
 } from 'lucide-react';
 import Layout from '../../components/Layout/Layout';
 import { useCourseStore } from '../../stores/courseStore';
@@ -47,7 +48,7 @@ const EditCourse = () => {
   const { instructors, fetchInstructors, loading: instructorsLoading } = useInstructorStore();
 
   const [formData, setFormData] = useState({
-    // Basic course information (from your Course model)
+    // Basic course information
     courseCode: '',
     name: '',
     description: '',
@@ -71,8 +72,12 @@ const EditCourse = () => {
     maxStudents: 20,
     practicalHours: 0,
     workshopRequired: false,
+    skillsLabRequired: false, // ADDED for nursing
     certification: '',
+    price: 0, // ADDED for course fee
     requirements: '',
+    courseBreakdown: '', // ADDED for syllabus
+    notes: '', // ADDED for additional notes
     
     // Status
     status: 'active'
@@ -117,33 +122,43 @@ const EditCourse = () => {
         maxStudents: currentCourse.maxStudents || 20,
         practicalHours: currentCourse.practicalHours || 0,
         workshopRequired: currentCourse.workshopRequired || false,
+        skillsLabRequired: currentCourse.skillsLabRequired || false, // ADDED
         certification: currentCourse.certification || '',
+        price: currentCourse.price || 0, // ADDED
         requirements: currentCourse.requirements || '',
+        courseBreakdown: currentCourse.courseBreakdown || '', // ADDED
+        notes: currentCourse.notes || '', // ADDED
         status: currentCourse.status || 'active'
       });
     }
   }, [currentCourse]);
 
-  // Data options based on your Course model
+  // Data options based on your Course model - UPDATED with CNA
   const courseTypes = [
     { value: 'driving', label: 'Driving Classes', icon: Car },
     { value: 'plumbing', label: 'Plumbing', icon: Droplets },
     { value: 'electrical', label: 'Electrical Installation', icon: Zap },
-    { value: 'computer', label: 'Computer Packages', icon: Cpu }
+    { value: 'computer', label: 'Computer Packages', icon: Cpu },
+    { value: 'cna', label: 'Certified Nursing Assistant', icon: HeartPulse } // ADDED
   ];
 
-  const durations = ['1 month', '3 months', '6 months'];
+  // UPDATED: Added longer durations for nursing
+  const durations = ['1 month', '3 months', '6 months', '1 year', '2 years'];
   
   const intakeMonths = [
     'January', 'February', 'March', 'April', 'May', 'June', 
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
   
+  // UPDATED: Added nursing certifications
   const certificationTypes = [
     'NTSA License',
     'Government Trade Test', 
     'Institutional Certificate',
-    'Other'
+    'Other',
+    'CNA Certification',
+    'NCLEX Preparation',
+    'State Board Approved'
   ];
   
   const statusOptions = ['active', 'inactive', 'completed', 'cancelled'];
@@ -224,11 +239,11 @@ const EditCourse = () => {
   const validateForm = () => {
     const newErrors = {};
 
-    // Required fields validation (from your Course model)
+    // Required fields validation
     const requiredFields = [
       'courseCode', 'name', 'courseType', 'duration', 
       'intakeMonth', 'intakeYear', 'batchNumber', 'instructor',
-      'maxStudents', 'certification'
+      'maxStudents', 'certification', 'price' // ADDED price
     ];
 
     requiredFields.forEach(field => {
@@ -237,22 +252,26 @@ const EditCourse = () => {
       }
     });
 
-    // Format validation
+    // Format validation - UPDATED to include CNA
     if (formData.courseCode && !/^[A-Z]{3,4}\d{3}$/.test(formData.courseCode.toUpperCase())) {
-      newErrors.courseCode = 'Course code must be like DRV101, PLB201, ELC301, COM401';
+      newErrors.courseCode = 'Course code must be like CNA101, DRV101, PLB201, ELC301, COM401';
     }
 
     if (formData.intakeYear && !/^\d{4}$/.test(formData.intakeYear)) {
       newErrors.intakeYear = 'Year must be 4 digits (e.g., 2024)';
     }
 
-    // Range validation
-    if (formData.maxStudents && (formData.maxStudents < 1 || formData.maxStudents > 50)) {
-      newErrors.maxStudents = 'Maximum students must be between 1 and 50';
+    // Range validation - UPDATED max to 100 for nursing
+    if (formData.maxStudents && (formData.maxStudents < 1 || formData.maxStudents > 100)) {
+      newErrors.maxStudents = 'Maximum students must be between 1 and 100';
     }
 
     if (formData.practicalHours && formData.practicalHours < 0) {
       newErrors.practicalHours = 'Practical hours cannot be negative';
+    }
+
+    if (formData.price && formData.price < 0) {
+      newErrors.price = 'Price cannot be negative';
     }
 
     // Schedule validation
@@ -389,7 +408,7 @@ const EditCourse = () => {
                       className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
                         errors.courseCode ? 'border-red-300' : 'border-gray-300'
                       }`}
-                      placeholder="e.g., DRV101, PLB201, ELC301, COM401"
+                      placeholder="e.g., CNA101, DRV101, PLB201, ELC301, COM401"
                       style={{ textTransform: 'uppercase' }}
                     />
                   </div>
@@ -418,7 +437,7 @@ const EditCourse = () => {
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
                       errors.name ? 'border-red-300' : 'border-gray-300'
                     }`}
-                    placeholder="e.g., Defensive Driving Course"
+                    placeholder="e.g., Certified Nursing Assistant, Defensive Driving"
                   />
                   {errors.name && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -460,7 +479,7 @@ const EditCourse = () => {
                   )}
                 </div>
 
-                {/* Duration */}
+                {/* Duration - UPDATED with longer options */}
                 <div>
                   <label htmlFor="duration" className="block text-sm font-medium text-gray-700 mb-2">
                     Duration *
@@ -568,7 +587,7 @@ const EditCourse = () => {
                   )}
                 </div>
 
-                {/* Maximum Students */}
+                {/* Maximum Students - UPDATED max to 100 */}
                 <div>
                   <label htmlFor="maxStudents" className="block text-sm font-medium text-gray-700 mb-2">
                     Maximum Students *
@@ -580,7 +599,7 @@ const EditCourse = () => {
                       id="maxStudents"
                       name="maxStudents"
                       min="1"
-                      max="50"
+                      max="100"
                       value={formData.maxStudents}
                       onChange={handleChange}
                       className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
@@ -597,6 +616,35 @@ const EditCourse = () => {
                   <p className="mt-1 text-xs text-gray-500">
                     Currently enrolled: {enrolledCount} students
                   </p>
+                </div>
+
+                {/* Price - NEW */}
+                <div>
+                  <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-2">
+                    Course Price (KSh) *
+                  </label>
+                  <div className="relative">
+                    <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="number"
+                      id="price"
+                      name="price"
+                      min="0"
+                      step="1000"
+                      value={formData.price}
+                      onChange={handleChange}
+                      className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
+                        errors.price ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="e.g., 50000"
+                    />
+                  </div>
+                  {errors.price && (
+                    <p className="mt-1 text-sm text-red-600 flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {errors.price}
+                    </p>
+                  )}
                 </div>
 
                 {/* Practical Hours */}
@@ -626,8 +674,8 @@ const EditCourse = () => {
                   )}
                 </div>
 
-                {/* Certification Type */}
-                <div>
+                {/* Certification Type - UPDATED with nursing options */}
+                <div className="md:col-span-2">
                   <label htmlFor="certification" className="block text-sm font-medium text-gray-700 mb-2">
                     Certification Type *
                   </label>
@@ -677,7 +725,7 @@ const EditCourse = () => {
                 </div>
 
                 {/* Workshop Required */}
-                <div className="md:col-span-2">
+                <div className="md:col-span-1">
                   <label className="flex items-center space-x-2">
                     <input
                       type="checkbox"
@@ -688,9 +736,20 @@ const EditCourse = () => {
                     />
                     <span className="text-sm text-gray-700">Workshop Required</span>
                   </label>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Check if this course requires workshop facilities
-                  </p>
+                </div>
+
+                {/* Skills Lab Required - NEW for nursing */}
+                <div className="md:col-span-1">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      name="skillsLabRequired"
+                      checked={formData.skillsLabRequired}
+                      onChange={handleChange}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <span className="text-sm text-gray-700">Skills Lab Required</span>
+                  </label>
                 </div>
               </div>
 
@@ -714,7 +773,27 @@ const EditCourse = () => {
                 </p>
               </div>
 
-              {/* Requirements */}
+              {/* Course Breakdown - NEW */}
+              <div className="mt-6">
+                <label htmlFor="courseBreakdown" className="block text-sm font-medium text-gray-700 mb-2">
+                  Course Breakdown / Syllabus
+                </label>
+                <textarea
+                  id="courseBreakdown"
+                  name="courseBreakdown"
+                  rows={4}
+                  value={formData.courseBreakdown}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  placeholder="Detailed breakdown of course modules, topics, and learning outcomes..."
+                  maxLength="2000"
+                />
+                <p className="mt-1 text-xs text-gray-500 text-right">
+                  {formData.courseBreakdown.length}/2000 characters
+                </p>
+              </div>
+
+              {/* Requirements - UPDATED max length */}
               <div className="mt-6">
                 <label htmlFor="requirements" className="block text-sm font-medium text-gray-700 mb-2">
                   Requirements (Optional)
@@ -727,10 +806,30 @@ const EditCourse = () => {
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
                   placeholder="Any special requirements for students..."
-                  maxLength="200"
+                  maxLength="500"
                 />
                 <p className="mt-1 text-xs text-gray-500 text-right">
-                  {formData.requirements.length}/200 characters
+                  {formData.requirements.length}/500 characters
+                </p>
+              </div>
+
+              {/* Notes - NEW */}
+              <div className="mt-6">
+                <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+                  Additional Notes
+                </label>
+                <textarea
+                  id="notes"
+                  name="notes"
+                  rows={2}
+                  value={formData.notes}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                  placeholder="Any additional notes about the course..."
+                  maxLength="1000"
+                />
+                <p className="mt-1 text-xs text-gray-500 text-right">
+                  {formData.notes.length}/1000 characters
                 </p>
               </div>
             </div>
@@ -871,7 +970,7 @@ const EditCourse = () => {
                       className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
                         errors['schedule.room'] ? 'border-red-300' : 'border-gray-300'
                       }`}
-                      placeholder="e.g., Room 101, Computer Lab A"
+                      placeholder="e.g., Room 101, Skills Lab A, Workshop B"
                       maxLength="50"
                     />
                   </div>

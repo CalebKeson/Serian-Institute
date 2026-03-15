@@ -7,7 +7,7 @@ const courseSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     uppercase: true,
-    match: [/^[A-Z]{3,4}\d{3}$/, 'Please enter a valid course code (e.g., DRV101, PLB201, ELC301, COM401)']
+    match: [/^[A-Z]{3,4}\d{3}$/, 'Please enter a valid course code (e.g., CNA101, DRV101, PLB201, ELC301, COM401)']
   },
   name: {
     type: String,
@@ -22,13 +22,13 @@ const courseSchema = new mongoose.Schema({
   },
   courseType: {
     type: String,
-    enum: ['driving', 'plumbing', 'electrical', 'computer'],
+    enum: ['driving', 'plumbing', 'electrical', 'computer', 'cna'],
     required: [true, 'Course type is required']
   },
   duration: {
     type: String,
     required: [true, 'Duration is required'],
-    enum: ['1 month', '3 months', '6 months']
+    enum: ['1 month', '3 months', '6 months', '1 year', '2 years']
   },
   intakeMonth: {
     type: String,
@@ -78,7 +78,7 @@ const courseSchema = new mongoose.Schema({
     type: Number,
     required: [true, 'Maximum students is required'],
     min: [1, 'Maximum students must be at least 1'],
-    max: [50, 'Maximum students cannot exceed 50'],
+    max: [100, 'Maximum students cannot exceed 100'],
     default: 20
   },
   practicalHours: {
@@ -91,15 +91,43 @@ const courseSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  skillsLabRequired: {
+    type: Boolean,
+    default: false
+  },
   certification: {
     type: String,
     required: [true, 'Certification type is required'],
-    enum: ['NTSA License', 'Government Trade Test', 'Institutional Certificate', 'Other']
+    enum: [
+      'NTSA License', 
+      'Government Trade Test', 
+      'Institutional Certificate', 
+      'Other',
+      'CNA Certification',
+      'NCLEX Preparation',
+      'State Board Approved'
+    ]
+  },
+  price: {
+    type: Number,
+    required: [true, 'Course price is required'],
+    min: [0, 'Price cannot be negative'],
+    default: 0
   },
   requirements: {
     type: String,
     trim: true,
-    maxlength: [200, 'Requirements cannot exceed 200 characters']
+    maxlength: [500, 'Requirements cannot exceed 500 characters']
+  },
+  courseBreakdown: {
+    type: String,
+    trim: true,
+    maxlength: [2000, 'Course breakdown cannot exceed 2000 characters']
+  },
+  notes: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Notes cannot exceed 1000 characters']
   },
   enrolledStudents: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -124,13 +152,13 @@ courseSchema.pre('save', async function(next) {
         driving: 'DRV',
         plumbing: 'PLB',
         electrical: 'ELC',
-        computer: 'COM'
+        computer: 'COM',
+        cna: 'CNA'
       };
       
       const prefix = typePrefixes[this.courseType] || 'CRS';
       const count = await mongoose.model('Course').countDocuments({ courseType: this.courseType });
       
-      // Generate code like DRV101, PLB201, etc.
       this.courseCode = `${prefix}${String(count + 1).padStart(3, '0')}`;
     } catch (error) {
       next(error);
@@ -139,23 +167,19 @@ courseSchema.pre('save', async function(next) {
   next();
 });
 
-// Index for better search performance
-// courseSchema.index({ courseCode: 1 });
+// Indexes
 courseSchema.index({ instructor: 1 });
 courseSchema.index({ courseType: 1 });
 courseSchema.index({ intakeMonth: 1 });
 courseSchema.index({ status: 1 });
+courseSchema.index({ price: 1 });
 
-// ============= FIXED VIRTUAL FIELDS WITH ULTIMATE NULL CHECKS =============
-
-// Virtual for enrolled students count - FIXED LINE 149 ISSUE
+// Virtual for enrolled students count
 courseSchema.virtual('enrolledCount').get(function() {
   try {
-    // ULTIMATE CHECK: Ensure enrolledStudents exists and is an array
     if (!this.enrolledStudents || !Array.isArray(this.enrolledStudents)) {
       return 0;
     }
-    // Safe to access length now
     return this.enrolledStudents.length;
   } catch (error) {
     console.error('Error in enrolledCount virtual:', error);
@@ -168,7 +192,6 @@ courseSchema.virtual('availableSpots').get(function() {
   try {
     const maxStudents = this.maxStudents || 0;
     
-    // ULTIMATE CHECK: Ensure enrolledStudents exists and is an array
     if (!this.enrolledStudents || !Array.isArray(this.enrolledStudents)) {
       return maxStudents;
     }
@@ -185,7 +208,6 @@ courseSchema.virtual('isFull').get(function() {
   try {
     const maxStudents = this.maxStudents || 0;
     
-    // ULTIMATE CHECK: Ensure enrolledStudents exists and is an array
     if (!this.enrolledStudents || !Array.isArray(this.enrolledStudents)) {
       return false;
     }
@@ -204,7 +226,8 @@ courseSchema.virtual('displayName').get(function() {
       driving: 'Driving Classes',
       plumbing: 'Plumbing',
       electrical: 'Electrical Installation',
-      computer: 'Computer Packages'
+      computer: 'Computer Packages',
+      cna: 'Certified Nursing Assistant'
     };
     const typeName = typeNames[this.courseType] || this.courseType || 'Unknown';
     const courseName = this.name || 'Unnamed Course';
@@ -233,7 +256,6 @@ courseSchema.virtual('enrollmentPercentage').get(function() {
   try {
     const maxStudents = this.maxStudents || 1;
     
-    // ULTIMATE CHECK: Ensure enrolledStudents exists and is an array
     if (!this.enrolledStudents || !Array.isArray(this.enrolledStudents)) {
       return 0;
     }
@@ -243,6 +265,11 @@ courseSchema.virtual('enrollmentPercentage').get(function() {
     console.error('Error in enrollmentPercentage virtual:', error);
     return 0;
   }
+});
+
+// Virtual for formatted price
+courseSchema.virtual('formattedPrice').get(function() {
+  return `KSh ${this.price?.toLocaleString() || '0'}`;
 });
 
 // Static method to find courses by instructor
@@ -260,10 +287,9 @@ courseSchema.statics.findByType = function(courseType) {
   return this.find({ courseType, status: 'active' });
 };
 
-// Instance method to check if student is enrolled - FIXED with null check
+// Instance method to check if student is enrolled
 courseSchema.methods.isStudentEnrolled = function(studentId) {
   try {
-    // ULTIMATE CHECK: Ensure enrolledStudents exists and is an array
     if (!this.enrolledStudents || !Array.isArray(this.enrolledStudents)) {
       return false;
     }
@@ -276,10 +302,9 @@ courseSchema.methods.isStudentEnrolled = function(studentId) {
   }
 };
 
-// Instance method to enroll student - FIXED with null check
+// Instance method to enroll student
 courseSchema.methods.enrollStudent = function(studentId) {
   try {
-    // ULTIMATE CHECK: Ensure enrolledStudents exists and is an array
     if (!this.enrolledStudents || !Array.isArray(this.enrolledStudents)) {
       this.enrolledStudents = [];
     }
@@ -297,10 +322,9 @@ courseSchema.methods.enrollStudent = function(studentId) {
   }
 };
 
-// Instance method to remove student - FIXED with null check
+// Instance method to remove student
 courseSchema.methods.removeStudent = function(studentId) {
   try {
-    // ULTIMATE CHECK: Ensure enrolledStudents exists and is an array
     if (!this.enrolledStudents || !Array.isArray(this.enrolledStudents)) {
       return this.save();
     }

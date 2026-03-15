@@ -1,8 +1,10 @@
+// controllers/student.controller.js
 import Student from '../models/student.model.js';
 import User from '../models/user.model.js';
+import Enrollment from '../models/enrollment.model.js';
 import { errorHandler } from '../utils/error.js';
 import mongoose from 'mongoose';
-import NotificationService from '../services/notificationService.js'; 
+import NotificationService from '../services/notificationService.js';
 
 // @desc    Get all students with pagination and search
 // @route   GET /api/students
@@ -40,7 +42,7 @@ export const getStudents = async (req, res, next) => {
   }
 };
 
-// @desc    Get single student
+// @desc    Get single student with enrollments
 // @route   GET /api/students/:id
 export const getStudent = async (req, res, next) => {
   try {
@@ -51,9 +53,30 @@ export const getStudent = async (req, res, next) => {
       return next(errorHandler(404, 'Student not found'));
     }
 
+    // FIXED: Get student enrollments to include in response
+    const enrollments = await Enrollment.find({ 
+      student: student._id,
+      status: 'enrolled'
+    })
+    .populate({
+      path: 'course',
+      select: 'courseCode name price'
+    })
+    .select('course enrollmentDate');
+
+    // Convert to plain object and add enrollments
+    const studentWithEnrollments = student.toObject();
+    studentWithEnrollments.enrollments = enrollments.map(e => ({
+      course: e.course._id,
+      courseCode: e.course.courseCode,
+      courseName: e.course.name,
+      coursePrice: e.course.price,
+      enrollmentDate: e.enrollmentDate
+    }));
+
     res.json({
       success: true,
-      data: student
+      data: studentWithEnrollments
     });
   } catch (error) {
     next(errorHandler(500, error.message));
@@ -85,7 +108,7 @@ export const createStudent = async (req, res, next) => {
     }
 
     // Create user first
-    const user = await User.create([{
+    const [user] = await User.create([{
       name,
       email,
       password,
@@ -98,22 +121,19 @@ export const createStudent = async (req, res, next) => {
     }
 
     // Create student profile
-    const student = await Student.create([{
-      user: user[0]._id,
+    const [student] = await Student.create([{
+      user: user._id,
       ...studentData,
     }], { session });
 
-    // Commit transaction
     await session.commitTransaction();
     session.endSession();
 
     // Populate and return
-    const populatedStudent = await Student.findById(student[0]._id)
+    const populatedStudent = await Student.findById(student._id)
       .populate('user', 'name email role');
 
-    // ============= NOTIFICATION: Student Created =============
-    
-    // 1. NOTIFY ADMINS - New student account created
+    // Send notifications
     try {
       await NotificationService.createForRole('admin', {
         title: '🎓 New Student Enrolled',
@@ -121,13 +141,7 @@ export const createStudent = async (req, res, next) => {
         type: 'student',
         actionUrl: `/students/${populatedStudent._id}`
       });
-    } catch (notificationError) {
-      console.error('Failed to notify admins:', notificationError);
-      // Don't fail the whole request if notification fails
-    }
 
-    // 2. NOTIFY THE STUDENT - Welcome message
-    try {
       const currentDate = new Date().toLocaleDateString('en-US', { 
         weekday: 'long', 
         year: 'numeric', 
@@ -136,15 +150,14 @@ export const createStudent = async (req, res, next) => {
       });
       
       await NotificationService.createNotification({
-        recipientId: user[0]._id,
+        recipientId: user._id,
         title: '🎉 Welcome to Serian Institute!',
         message: `Hello ${name}! Your student account has been successfully created on ${currentDate}. Your Student ID is ${populatedStudent.studentId}. You can now access your dashboard, courses, and resources. Welcome to our learning community! 🚀`,
         type: 'student',
         actionUrl: '/dashboard'
       });
-    } catch (studentNotificationError) {
-      console.error('Failed to notify student:', studentNotificationError);
-      // Don't fail the whole request if notification fails
+    } catch (notificationError) {
+      console.error('Failed to send notifications:', notificationError);
     }
 
     res.status(201).json({
@@ -153,7 +166,6 @@ export const createStudent = async (req, res, next) => {
       data: populatedStudent
     });
   } catch (error) {
-    // Rollback transaction on error
     await session.abortTransaction();
     session.endSession();
     
@@ -171,19 +183,15 @@ export const createStudent = async (req, res, next) => {
 // @route   PUT /api/students/:id
 export const updateStudent = async (req, res, next) => {
   try {
-    // Find student first
     const student = await Student.findById(req.params.id);
     if (!student) {
       return next(errorHandler(404, 'Student not found'));
     }
 
-    // Extract user update data if present
     const { name, email, ...studentData } = req.body;
 
-    // Track changes for notification
     const changes = [];
     
-    // Update user if name or email provided
     if (name || email) {
       const userUpdate = {};
       if (name) {
@@ -201,7 +209,6 @@ export const updateStudent = async (req, res, next) => {
       });
     }
 
-    // Check student data changes
     if (studentData.gender && studentData.gender !== student.gender) {
       changes.push(`Gender updated to: ${studentData.gender}`);
     }
@@ -212,17 +219,14 @@ export const updateStudent = async (req, res, next) => {
       changes.push(`Status changed from ${student.status} to ${studentData.status}`);
     }
 
-    // Update student
     const updatedStudent = await Student.findByIdAndUpdate(
       req.params.id,
       studentData,
       { new: true, runValidators: true }
     ).populate('user', 'name email role');
 
-    // ============= NOTIFICATION: Student Updated =============
     if (changes.length > 0) {
       try {
-        // 1. NOTIFY ADMINS - Student profile updated
         await NotificationService.createForRole('admin', {
           title: '📝 Student Profile Updated',
           message: `${updatedStudent.user.name}'s profile was updated by ${req.user.name || 'an admin'}. Changes: ${changes.join(', ')}`,
@@ -230,16 +234,13 @@ export const updateStudent = async (req, res, next) => {
           actionUrl: `/students/${updatedStudent._id}`
         });
 
-        // 2. NOTIFY THE STUDENT - Their profile was updated
-        if (changes.length > 0) {
-          await NotificationService.createNotification({
-            recipientId: student.user,
-            title: '🔔 Your Profile Has Been Updated',
-            message: `Your student profile has been updated. Changes made: ${changes.join(', ')}. If you didn't request these changes, please contact administration.`,
-            type: 'student',
-            actionUrl: `/students/${updatedStudent._id}`
-          });
-        }
+        await NotificationService.createNotification({
+          recipientId: student.user,
+          title: '🔔 Your Profile Has Been Updated',
+          message: `Your student profile has been updated. Changes made: ${changes.join(', ')}. If you didn't request these changes, please contact administration.`,
+          type: 'student',
+          actionUrl: `/students/${updatedStudent._id}`
+        });
       } catch (notificationError) {
         console.error('Failed to send update notifications:', notificationError);
       }
@@ -270,29 +271,20 @@ export const deleteStudent = async (req, res, next) => {
       return next(errorHandler(404, 'Student not found'));
     }
 
-    // Store student info before deletion for notification
     const studentName = student.user.name;
     const studentEmail = student.user.email;
     const studentId = student.studentId;
 
-    // Delete both student and user
     await User.findByIdAndDelete(student.user);
     await Student.findByIdAndDelete(req.params.id);
 
-    // ============= NOTIFICATION: Student Deleted =============
     try {
-      // NOTIFY ADMINS - Student account deleted
       await NotificationService.createForRole('admin', {
         title: '🗑️ Student Account Deleted',
         message: `Student account for ${studentName} (ID: ${studentId}, Email: ${studentEmail}) was permanently deleted by ${req.user.name || 'an admin'}.`,
         type: 'student',
         actionUrl: '/students'
       });
-
-      // Optional: If you want to notify the student (via email before deletion)
-      // This would require sending an email before deleting the account
-      // For now, we'll skip since the account is deleted
-      
     } catch (notificationError) {
       console.error('Failed to send deletion notifications:', notificationError);
     }
@@ -310,7 +302,6 @@ export const deleteStudent = async (req, res, next) => {
 // @route   GET /api/students/stats
 export const getStudentStats = async (req, res, next) => {
   try {
-    // Only admin and teachers can view student stats
     if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
       return next(errorHandler(403, 'Access denied'));
     }
@@ -324,10 +315,8 @@ export const getStudentStats = async (req, res, next) => {
       }
     ]);
 
-    // Get total count
     const total = await Student.countDocuments();
 
-    // Get today's new students
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -335,7 +324,6 @@ export const getStudentStats = async (req, res, next) => {
       createdAt: { $gte: today }
     });
 
-    // Format the stats
     const formattedStats = {
       total,
       today: todayStudents,
@@ -358,7 +346,6 @@ export const getStudentStats = async (req, res, next) => {
 // @route   GET /api/students/count
 export const getStudentCount = async (req, res, next) => {
   try {
-    // Only admin and teachers can view student count
     if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
       return res.json({
         success: true,
@@ -384,16 +371,12 @@ export const getAvailableStudents = async (req, res, next) => {
     const { courseId } = req.params;
     const { search = '' } = req.query;
 
-    // Check if course exists
-    const Course = (await import('../models/course.model.js')).default;
-    const course = await Course.findById(courseId);
+    const course = await mongoose.model('Course').findById(courseId);
     
     if (!course) {
       return next(errorHandler(404, 'Course not found'));
     }
 
-    // Get enrolled student IDs for this course
-    const Enrollment = (await import('../models/enrollment.model.js')).default;
     const enrollments = await Enrollment.find({ 
       course: courseId,
       status: 'enrolled' 
@@ -401,13 +384,11 @@ export const getAvailableStudents = async (req, res, next) => {
 
     const enrolledStudentIds = enrollments.map(e => e.student);
 
-    // Build query for available students (not enrolled)
     const query = {
       _id: { $nin: enrolledStudentIds },
-      status: 'active' // Only active students
+      status: 'active'
     };
 
-    // Add search filter if provided
     if (search) {
       const users = await User.find({
         $or: [
@@ -424,11 +405,10 @@ export const getAvailableStudents = async (req, res, next) => {
       ];
     }
 
-    // Get available students with user data populated
     const students = await Student.find(query)
       .populate('user', 'name email')
       .sort({ studentId: 1 })
-      .limit(50); // Limit for UI performance
+      .limit(50);
 
     res.json({
       success: true,
@@ -439,4 +419,170 @@ export const getAvailableStudents = async (req, res, next) => {
   } catch (error) {
     next(errorHandler(500, error.message));
   } 
+};
+
+// @desc    Get student fee summary (for student dashboard)
+// @route   GET /api/students/:id/fees
+// @access  Private
+export const getStudentFees = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user.role === 'student') {
+      const student = await Student.findOne({ user: req.user._id });
+      if (!student || student._id.toString() !== id) {
+        return next(errorHandler(403, 'Access denied'));
+      }
+    }
+
+    const StudentFee = mongoose.model('StudentFee');
+    const Payment = mongoose.model('Payment');
+
+    let studentFee = await StudentFee.findOne({ student: id })
+      .populate({
+        path: 'courses.course',
+        select: 'courseCode name price duration instructor status'
+      })
+      .populate({
+        path: 'courses.payments',
+        options: { sort: { paymentDate: -1 } }
+      });
+
+    if (!studentFee) {
+      studentFee = await StudentFee.create({
+        student: id,
+        courses: []
+      });
+    }
+
+    const recentPayments = await Payment.find({ student: id })
+      .populate('course', 'courseCode name')
+      .sort({ paymentDate: -1 })
+      .limit(5);
+
+    res.json({
+      success: true,
+      data: {
+        summary: studentFee.paymentSummary,
+        courses: studentFee.courseBreakdown,
+        recentPayments: recentPayments.map(p => ({
+          id: p._id,
+          amount: p.amount,
+          formattedAmount: `KSh ${p.amount.toLocaleString()}`,
+          date: p.paymentDate,
+          course: p.course?.name,
+          method: p.paymentMethodDisplay || p.paymentMethod,
+          purpose: p.paymentForDisplay || p.paymentFor
+        }))
+      }
+    });
+
+  } catch (error) {
+    next(errorHandler(500, error.message));
+  }
+};
+
+// @desc    Get all students with fee status (for admin)
+// @route   GET /api/students/fees/overview
+// @access  Private (Admin, Instructor)
+export const getAllStudentsFeeStatus = async (req, res, next) => {
+  try {
+    const { status, courseId, search } = req.query;
+
+    const StudentFee = mongoose.model('StudentFee');
+    
+    let filters = {};
+    if (status) filters.status = status;
+
+    let summaries = await StudentFee.getAllFeeSummaries(filters);
+
+    if (courseId) {
+      const enrollments = await Enrollment.find({ 
+        course: courseId, 
+        status: 'enrolled' 
+      }).select('student');
+      
+      const enrolledStudentIds = enrollments.map(e => e.student.toString());
+      summaries = summaries.filter(s => 
+        enrolledStudentIds.includes(s.studentId.toString())
+      );
+    }
+
+    if (search) {
+      const searchLower = search.toLowerCase();
+      summaries = summaries.filter(s =>
+        s.studentName.toLowerCase().includes(searchLower) ||
+        s.studentNumber.toLowerCase().includes(searchLower)
+      );
+    }
+
+    const stats = {
+      totalStudents: summaries.length,
+      totalFees: summaries.reduce((sum, s) => sum + s.totalFees, 0),
+      totalPaid: summaries.reduce((sum, s) => sum + s.totalPaid, 0),
+      totalBalance: summaries.reduce((sum, s) => sum + s.totalBalance, 0),
+      averagePercentage: summaries.length > 0
+        ? Math.round(summaries.reduce((sum, s) => sum + s.overallPercentage, 0) / summaries.length)
+        : 0,
+      byStatus: {
+        fullyPaid: summaries.filter(s => s.totalBalance === 0).length,
+        partial: summaries.filter(s => s.totalPaid > 0 && s.totalBalance > 0).length,
+        unpaid: summaries.filter(s => s.totalPaid === 0).length
+      }
+    };
+
+    res.json({
+      success: true,
+      data: {
+        stats,
+        students: summaries
+      }
+    });
+
+  } catch (error) {
+    next(errorHandler(500, error.message));
+  }
+};
+
+// @desc    Get single student with enrollments
+// @route   GET /api/students/:id/with-enrollments
+// @access  Private
+export const getStudentWithEnrollments = async (req, res, next) => {
+  try {
+    const student = await Student.findById(req.params.id)
+      .populate('user', 'name email role');
+
+    if (!student) {
+      return next(errorHandler(404, 'Student not found'));
+    }
+
+    // Get student enrollments
+    const enrollments = await Enrollment.find({ 
+      student: student._id,
+      status: 'enrolled'
+    })
+    .populate({
+      path: 'course',
+      select: 'courseCode name price _id'
+    })
+    .select('course enrollmentDate');
+
+    // Convert to plain object and add enrollments
+    const studentWithEnrollments = student.toObject();
+    studentWithEnrollments.enrollments = enrollments.map(e => ({
+      course: e.course._id,
+      courseId: e.course._id,
+      courseCode: e.course.courseCode,
+      courseName: e.course.name,
+      coursePrice: e.course.price,
+      enrollmentDate: e.enrollmentDate
+    }));
+
+    res.json({
+      success: true,
+      data: studentWithEnrollments
+    });
+  } catch (error) {
+    next(errorHandler(500, error.message));
+  }
 };

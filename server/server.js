@@ -10,6 +10,10 @@ import attendanceRoutes from './routes/attendance.route.js';
 import requestRoutes from './routes/request.route.js';
 import notificationRoutes from './routes/notification.route.js';
 import gradeRoutes from './routes/grades.route.js';
+import paymentRoutes from './routes/payment.route.js';
+import dashboardRoutes from './routes/dashboard.route.js';
+import reportsRoutes from './routes/reports.route.js';
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,6 +42,9 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/requests', requestRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/grades', gradeRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/reports', reportsRoutes);
 
 // Error handling middleware
 app.use((error, req, res, next) => {

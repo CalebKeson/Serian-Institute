@@ -1,3 +1,4 @@
+// src/services/courseAPI.js - UPDATED with payment methods
 import api from './api';
 
 export const courseAPI = {
@@ -26,7 +27,7 @@ export const courseAPI = {
     });
   },
 
-  // ADD THIS: Get course count for sidebar
+  // Get course count for sidebar
   getCourseCount: () => {
     return api.get('/courses/count');
   },
@@ -74,6 +75,35 @@ export const courseAPI = {
   // Get course statistics
   getCourseStats: () => {
     return api.get('/courses/stats/overview');
+  },
+
+  // ============= NEW PAYMENT-RELATED METHODS =============
+  
+  // Get course payment summary
+  getCoursePaymentSummary: (courseId) => {
+    return api.get(`/courses/${courseId}/payments/summary`);
+  },
+
+  // Get all students payment status for a course
+  getCourseStudentsPaymentStatus: (courseId, params = {}) => {
+    const { status, search } = params;
+    return api.get(`/courses/${courseId}/payments/students`, {
+      params: { status, search }
+    });
+  },
+
+  // Get specific student payment details in a course
+  getStudentCoursePayments: (courseId, studentId) => {
+    return api.get(`/courses/${courseId}/students/${studentId}/payments`);
+  },
+
+  // Export course payment report
+  exportCoursePaymentReport: (courseId, params = {}) => {
+    const { format = 'csv' } = params;
+    return api.get(`/courses/${courseId}/payments/export`, { 
+      params: { format },
+      responseType: 'blob' 
+    });
   }
 };
 

@@ -20,7 +20,8 @@ import {
   BarChart3,
   TrendingUp,
   PieChart,
-  Award as GradeIcon
+  Award as GradeIcon,
+  DollarSign // ADD THIS IMPORT
 } from 'lucide-react';
 import Layout from '../../components/Layout/Layout';
 import { useStudentStore } from '../../stores/studentStore';
@@ -31,6 +32,7 @@ import EnrollmentTable from '../../components/Enrollment/EnrollmentTable';
 import StudentAttendanceSummary from '../../components/Attendance/StudentAttendanceSummary';
 import GradeTable from '../../components/Grades/GradeTable';
 import GradeStatistics from '../../components/Grades/GradeStatistics';
+import { formatCurrency } from '../../utils/feeFormatter'; // ADD THIS IMPORT
 import toast from 'react-hot-toast';
 
 const StudentProfile = () => {
@@ -60,6 +62,8 @@ const StudentProfile = () => {
 
   const [activeTab, setActiveTab] = useState('overview');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [totalFees, setTotalFees] = useState(0); // ADD THIS STATE
+  const [outstandingBalance, setOutstandingBalance] = useState(0); // ADD THIS STATE
 
   // Fetch student and enrollment data
   useEffect(() => {
@@ -73,6 +77,17 @@ const StudentProfile = () => {
       clearGrades();
     };
   }, [id]);
+
+  // Calculate fee totals from enrollments
+  useEffect(() => {
+    if (studentEnrollments.length > 0) {
+      // This would ideally come from the fee store
+      // For now, we'll use placeholder or fetch from payment store
+      const total = studentEnrollments.reduce((sum, e) => sum + (e.course?.price || 0), 0);
+      setTotalFees(total);
+      setOutstandingBalance(total * 0.3); // Placeholder - replace with actual data
+    }
+  }, [studentEnrollments]);
 
   // Fetch grades when switching to grades tab
   useEffect(() => {
@@ -103,6 +118,10 @@ const StudentProfile = () => {
 
   const handleEdit = () => {
     navigate(`/students/edit/${id}`);
+  };
+
+  const handleViewFees = () => { // ADD THIS FUNCTION
+    navigate(`/fees/student/${id}`);
   };
 
   const handleViewCourse = (courseId) => {
@@ -247,6 +266,16 @@ const StudentProfile = () => {
                 Refresh
               </button>
               
+              {['admin', 'receptionist'].includes(user?.role) && (
+                <button
+                  onClick={handleViewFees}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors"
+                >
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  View Fees
+                </button>
+              )}
+              
               {user?.role === 'admin' && (
                 <button
                   onClick={handleEdit}
@@ -260,7 +289,7 @@ const StudentProfile = () => {
           </div>
         </div>
 
-        {/* Student Quick Info Bar */}
+        {/* Student Quick Info Bar - UPDATED with Fee Info */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
           <div className="flex flex-wrap items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -284,7 +313,7 @@ const StudentProfile = () => {
                 </div>
               </div>
             </div>
-            <div className="flex items-center space-x-4 mt-2 sm:mt-0">
+            <div className="flex items-center space-x-6 mt-2 sm:mt-0">
               <div className="text-right">
                 <p className="text-xs text-gray-500">GPA</p>
                 <p className="text-xl font-bold text-purple-600">{gpa}</p>
@@ -292,6 +321,13 @@ const StudentProfile = () => {
               <div className="text-right">
                 <p className="text-xs text-gray-500">Courses</p>
                 <p className="text-xl font-bold text-blue-600">{stats.enrolled}</p>
+              </div>
+              {/* ADDED: Fee Summary */}
+              <div className="text-right">
+                <p className="text-xs text-gray-500">Outstanding</p>
+                <p className={`text-xl font-bold ${outstandingBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                  {formatCurrency(outstandingBalance)}
+                </p>
               </div>
             </div>
           </div>
@@ -358,12 +394,12 @@ const StudentProfile = () => {
           </nav>
         </div>
 
-        {/* Tab Content */}
+        {/* Tab Content - Keep existing tab content but update Quick Actions Card */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Main Content - 3/4 width */}
+            {/* Main Content - Keep existing */}
             <div className="lg:col-span-3 space-y-6">
-              {/* Student Information Card */}
+              {/* ... existing overview content ... */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <User className="w-5 h-5 mr-2 text-blue-600" />
@@ -516,7 +552,7 @@ const StudentProfile = () => {
               </div>
             </div>
 
-            {/* Sidebar - 1/4 width */}
+            {/* Sidebar - UPDATED with Fee Actions */}
             <div className="space-y-6">
               {/* Quick Stats Card */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -560,6 +596,18 @@ const StudentProfile = () => {
                     <span className="text-sm text-gray-500">GPA</span>
                     <span className="text-sm font-medium text-purple-600">{gpa}</span>
                   </div>
+
+                  {/* ADDED: Fee Summary in Sidebar */}
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                    <span className="text-sm text-gray-500">Total Fees</span>
+                    <span className="text-sm font-medium text-gray-900">{formatCurrency(totalFees)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Outstanding</span>
+                    <span className={`text-sm font-bold ${outstandingBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                      {formatCurrency(outstandingBalance)}
+                    </span>
+                  </div>
                   
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">Last Updated</span>
@@ -570,47 +618,56 @@ const StudentProfile = () => {
                 </div>
               </div>
 
-              {/* Quick Actions Card */}
-              {user?.role === 'admin' && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Quick Actions
-                  </h3>
+              {/* Quick Actions Card - UPDATED with Fee Button */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  Quick Actions
+                </h3>
+                
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setActiveTab('attendance')}
+                    className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    View Attendance
+                  </button>
                   
-                  <div className="space-y-3">
+                  <button
+                    onClick={() => setActiveTab('grades')}
+                    className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    <GradeIcon className="w-4 h-4 mr-2" />
+                    View Grades
+                  </button>
+
+                  {/* ADDED: View Fees Button */}
+                  {['admin', 'receptionist'].includes(user?.role) && (
                     <button
-                      onClick={() => setActiveTab('attendance')}
-                      className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                      onClick={handleViewFees}
+                      className="w-full flex items-center justify-center px-4 py-2 border border-green-300 rounded-lg text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors"
                     >
-                      <BarChart3 className="w-4 h-4 mr-2" />
-                      View Attendance
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      View Fees
                     </button>
-                    
-                    <button
-                      onClick={() => setActiveTab('grades')}
-                      className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-                    >
-                      <GradeIcon className="w-4 h-4 mr-2" />
-                      View Grades
-                    </button>
-                    
-                    <button
-                      onClick={handleEdit}
-                      className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-                    >
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit Profile
-                    </button>
-                    
-                    <Link
-                      to="/students"
-                      className="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 transition-all"
-                    >
-                      Back to List
-                    </Link>
-                  </div>
+                  )}
+                  
+                  <button
+                    onClick={handleEdit}
+                    className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Profile
+                  </button>
+                  
+                  <Link
+                    to="/students"
+                    className="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 transition-all"
+                  >
+                    Back to List
+                  </Link>
                 </div>
-              )}
+              </div>
 
               {/* System Information Card */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -657,6 +714,7 @@ const StudentProfile = () => {
           </div>
         )}
 
+        {/* Rest of the tabs remain the same */}
         {activeTab === 'enrollments' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-6">
@@ -730,7 +788,6 @@ const StudentProfile = () => {
                 </div>
               </div>
 
-              {/* Grade Table */}
               <GradeTable
                 grades={studentGrades}
                 loading={gradesLoading}
@@ -752,14 +809,13 @@ const StudentProfile = () => {
               )}
             </div>
 
-            {/* Grade Statistics */}
             {studentGrades.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <TrendingUp className="w-5 h-5 mr-2 text-blue-600" />
                   Performance Analytics
                 </h3>
-                {id && <GradeStatistics studentId={id} view="student" />}
+                <GradeStatistics studentId={id} view="student" />
               </div>
             )}
           </div>

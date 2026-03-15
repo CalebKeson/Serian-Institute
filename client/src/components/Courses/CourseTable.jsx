@@ -1,4 +1,4 @@
-// src/components/Courses/CourseTable.jsx - UPDATED VERSION
+// src/components/Courses/CourseTable.jsx - UPDATED WITH CNA
 import React from "react";
 import {
   BookOpen,
@@ -17,6 +17,7 @@ import {
   Zap,
   Cpu,
   Award,
+  HeartPulse // ADD THIS for CNA
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -29,24 +30,41 @@ const CourseTable = ({
   currentUser,
 }) => {
   const navigate = useNavigate();
+
+  // UPDATED: Added CNA to course type icons
   const getCourseTypeIcon = (courseType) => {
     const icons = {
       driving: Car,
       plumbing: Droplets,
       electrical: Zap,
       computer: Cpu,
+      cna: HeartPulse // ADDED
     };
     return icons[courseType] || BookOpen;
   };
 
+  // UPDATED: Added CNA to course type labels
   const getCourseTypeLabel = (courseType) => {
     const labels = {
       driving: "Driving",
       plumbing: "Plumbing",
       electrical: "Electrical",
       computer: "Computer",
+      cna: "Nursing Assistant" // ADDED
     };
     return labels[courseType] || courseType;
+  };
+
+  // UPDATED: Added CNA to course type colors
+  const getCourseTypeColor = (courseType) => {
+    const colors = {
+      driving: "bg-red-100 text-red-600",
+      plumbing: "bg-blue-100 text-blue-600",
+      electrical: "bg-yellow-100 text-yellow-600",
+      computer: "bg-purple-100 text-purple-600",
+      cna: "bg-pink-100 text-pink-600" // ADDED
+    };
+    return colors[courseType] || "bg-gray-100 text-gray-600";
   };
 
   const getStatusBadge = (status) => {
@@ -70,10 +88,7 @@ const CourseTable = ({
     );
   };
 
-  // Replace the getEnrollmentBadge function in CourseTable.jsx with this:
-
   const getEnrollmentBadge = (course) => {
-    // Get enrolled count from either enrolledStudents array or enrolledCount virtual
     const enrolledCount =
       course.enrolledCount || course.enrolledStudents?.length || 0;
     const maxStudents = course.maxStudents || 0;
@@ -210,6 +225,7 @@ const CourseTable = ({
         <tbody className="bg-white divide-y divide-gray-200">
           {courses.map((course) => {
             const CourseTypeIcon = getCourseTypeIcon(course.courseType);
+            const typeColorClass = getCourseTypeColor(course.courseType);
 
             return (
               <tr
@@ -219,27 +235,9 @@ const CourseTable = ({
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <div
-                      className={`h-10 w-10 flex-shrink-0 rounded-lg flex items-center justify-center ${
-                        course.courseType === "driving"
-                          ? "bg-red-100"
-                          : course.courseType === "plumbing"
-                            ? "bg-blue-100"
-                            : course.courseType === "electrical"
-                              ? "bg-yellow-100"
-                              : "bg-purple-100"
-                      }`}
+                      className={`h-10 w-10 flex-shrink-0 rounded-lg flex items-center justify-center ${typeColorClass}`}
                     >
-                      <CourseTypeIcon
-                        className={`w-5 h-5 ${
-                          course.courseType === "driving"
-                            ? "text-red-600"
-                            : course.courseType === "plumbing"
-                              ? "text-blue-600"
-                              : course.courseType === "electrical"
-                                ? "text-yellow-600"
-                                : "text-purple-600"
-                        }`}
-                      />
+                      <CourseTypeIcon className="w-5 h-5" />
                     </div>
                     <div className="ml-4">
                       <div className="text-sm font-medium text-gray-900">
@@ -294,7 +292,6 @@ const CourseTable = ({
 
                     {currentUser?.role === "admin" && (
                       <>
-                        {/* Mark Attendance Button - Add this */}
                         <button
                           onClick={() =>
                             navigate(`/courses/${course._id}/attendance`)

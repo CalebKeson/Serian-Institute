@@ -1,10 +1,10 @@
+// src/services/enrollmentAPI.js
 import api from "./api";
 
 export const enrollmentAPI = {
   // Enroll a student in a course
   enrollStudent: async (courseId, studentId, notes = "") => {
     try {
-      // IMPORTANT: Send as separate fields, not wrapped in an object
       const response = await api.post("/enrollments", {
         studentId,
         courseId,
@@ -29,8 +29,6 @@ export const enrollmentAPI = {
   },
 
   // Remove student from course
-  // Replace your removeStudent method in enrollmentAPI.js with this:
-
   removeStudent: async (courseId, studentId) => {
     try {
       const response = await api.delete("/enrollments", {
@@ -127,8 +125,7 @@ export const enrollmentAPI = {
     }
   },
 
-  // Replace your updateEnrollment method in enrollmentAPI.js with this:
-
+  // Update enrollment status
   updateEnrollment: async (enrollmentId, data) => {
     try {
       const response = await api.put(`/enrollments/${enrollmentId}`, data);
@@ -144,7 +141,7 @@ export const enrollmentAPI = {
         data: error.response?.data,
         message: error.message,
         enrollmentId,
-        data,
+        // data,
       });
 
       const errorMessage =
@@ -179,6 +176,36 @@ export const enrollmentAPI = {
       return { success: false, message: errorMessage };
     }
   },
+
+  // NEW: Get enrollment statistics
+  getEnrollmentStats: async () => {
+    try {
+      const response = await api.get("/enrollments/stats");
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error) {
+      console.error("Get enrollment stats API error:", error);
+      const errorMessage =
+        error.response?.data?.message || "Failed to fetch enrollment statistics";
+      return { success: false, message: errorMessage };
+    }
+  },
+
+  // NEW: Get enrollment count (for sidebar)
+  getEnrollmentCount: async () => {
+    try {
+      const response = await api.get("/enrollments/count");
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error) {
+      console.error("Get enrollment count error:", error);
+      return { success: false, message: error.message };
+    }
+  }
 };
 
 export default enrollmentAPI;

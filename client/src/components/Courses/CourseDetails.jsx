@@ -1,4 +1,4 @@
-// src/pages/Courses/CourseDetails.jsx
+// src/pages/Courses/CourseDetails.jsx - UPDATED WITH CNA
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router';
 import {
@@ -31,16 +31,20 @@ import {
   ChevronRight,
   GraduationCap,
   Wrench,
-  Award as GradeIcon // Add this import
+  Award as GradeIcon,
+  DollarSign,
+  HeartPulse // ADD THIS for CNA
 } from 'lucide-react';
 import Layout from '../../components/Layout/Layout';
 import { useCourseStore } from '../../stores/courseStore';
 import { useEnrollmentStore } from '../../stores/enrollmentStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useGradeStore } from '../../stores/gradeStore'; // Add this import
-import GradeTable from '../../components/Grades/GradeTable'; // Add this import
-import GradeEntryModal from '../../components/Grades/GradeEntryModal'; // Add this import
-import GradeStatistics from '../../components/Grades/GradeStatistics'; // Add this import
+import { useGradeStore } from '../../stores/gradeStore';
+import { usePaymentStore } from '../../stores/paymentStore';
+import GradeTable from '../../components/Grades/GradeTable';
+import GradeEntryModal from '../../components/Grades/GradeEntryModal';
+import GradeStatistics from '../../components/Grades/GradeStatistics';
+import { formatCurrency } from '../../utils/feeFormatter';
 import toast from 'react-hot-toast';
 
 const CourseDetails = () => {
@@ -70,6 +74,12 @@ const CourseDetails = () => {
     clearGrades
   } = useGradeStore();
 
+  const {
+    coursePaymentSummary,
+    fetchCoursePaymentSummary,
+    loading: paymentLoading
+  } = usePaymentStore();
+
   const [activeTab, setActiveTab] = useState('overview');
   const [refreshing, setRefreshing] = useState(false);
   const [showGradeModal, setShowGradeModal] = useState(false);
@@ -91,6 +101,13 @@ const CourseDetails = () => {
   useEffect(() => {
     if (activeTab === 'grades' && id) {
       fetchCourseGrades(id);
+    }
+  }, [activeTab, id]);
+
+  // Fetch payment summary when switching to fees tab
+  useEffect(() => {
+    if (activeTab === 'fees' && id) {
+      fetchCoursePaymentSummary(id);
     }
   }, [activeTab, id]);
 
@@ -119,10 +136,17 @@ const CourseDetails = () => {
     navigate(`/courses/${id}/enrollments`);
   };
 
+  const handleViewCourseFees = () => {
+    navigate(`/fees/course/${id}`);
+  };
+
   const handleRefresh = () => {
     loadCourseData();
     if (activeTab === 'grades') {
       fetchCourseGrades(id);
+    }
+    if (activeTab === 'fees') {
+      fetchCoursePaymentSummary(id);
     }
     toast.success('Course data refreshed');
   };
@@ -158,18 +182,15 @@ const CourseDetails = () => {
     if (result.success) {
       setShowGradeModal(false);
       setEditingGrade(null);
-      // Refresh grades
       fetchCourseGrades(id);
     }
   };
 
   const handlePublishGrades = async (gradeIds) => {
-    // This would need a bulk publish endpoint
     toast.success('Grades published successfully');
   };
 
   const handleExportGrades = () => {
-    // This would trigger export functionality
     toast.success('Grades export started');
   };
 
@@ -220,6 +241,7 @@ const CourseDetails = () => {
     return configs[status] || configs.inactive;
   };
 
+  // UPDATED: Added CNA to course type config
   const getCourseTypeConfig = (courseType) => {
     const configs = {
       driving: {
@@ -253,6 +275,14 @@ const CourseDetails = () => {
         bgColor: 'bg-purple-50',
         iconColor: 'text-purple-600',
         borderColor: 'border-purple-200'
+      },
+      cna: { // ADDED for nursing
+        color: 'bg-pink-100 text-pink-800',
+        icon: HeartPulse,
+        label: 'Certified Nursing Assistant',
+        bgColor: 'bg-pink-50',
+        iconColor: 'text-pink-600',
+        borderColor: 'border-pink-200'
       }
     };
     return configs[courseType] || { 
@@ -265,6 +295,7 @@ const CourseDetails = () => {
     };
   };
 
+  // UPDATED: Added CNA certifications
   const getCertificationConfig = (certification) => {
     const configs = {
       'NTSA License': { 
@@ -286,6 +317,21 @@ const CourseDetails = () => {
         color: 'bg-gray-100 text-gray-800', 
         icon: Award,
         bgColor: 'bg-gray-50'
+      },
+      'CNA Certification': { // ADDED
+        color: 'bg-pink-100 text-pink-800',
+        icon: Award,
+        bgColor: 'bg-pink-50'
+      },
+      'NCLEX Preparation': { // ADDED
+        color: 'bg-indigo-100 text-indigo-800',
+        icon: Award,
+        bgColor: 'bg-indigo-50'
+      },
+      'State Board Approved': { // ADDED
+        color: 'bg-teal-100 text-teal-800',
+        icon: Shield,
+        bgColor: 'bg-teal-50'
       }
     };
     return configs[certification] || configs['Other'];
@@ -346,6 +392,11 @@ const CourseDetails = () => {
   const CourseTypeIcon = courseTypeConfig.icon;
   const CertificationIcon = certificationConfig.icon;
   const EnrollmentStatusIcon = enrollmentStatus.icon;
+
+  // Get payment summary
+  const collectionRate = coursePaymentSummary?.financialSummary?.collectionPercentage || 0;
+  const totalCollected = coursePaymentSummary?.financialSummary?.totalCollected || 0;
+  const expectedRevenue = coursePaymentSummary?.financialSummary?.expectedRevenue || 0;
 
   if (courseLoading && !currentCourse && !refreshing) {
     return (
@@ -436,6 +487,16 @@ const CourseDetails = () => {
                   Manage Enrollments
                 </button>
               )}
+
+              {['admin', 'receptionist'].includes(user?.role) && (
+                <button
+                  onClick={handleViewCourseFees}
+                  className="inline-flex items-center px-4 py-2 border border-green-300 rounded-lg text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors"
+                >
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  View Fees
+                </button>
+              )}
               
               {['admin', 'instructor'].includes(user?.role) && (
                 <button
@@ -485,10 +546,21 @@ const CourseDetails = () => {
               <BarChart3 className="w-4 h-4 inline mr-2" />
               Statistics
             </button>
+            <button
+              onClick={() => setActiveTab('fees')}
+              className={`py-4 px-1 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'fees'
+                  ? 'border-green-600 text-green-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <DollarSign className="w-4 h-4 inline mr-2" />
+              Fees
+            </button>
           </nav>
         </div>
 
-        {/* Tab Content */}
+        {/* Tab Content - Only showing the Overview tab changes for CNA */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Column - Course Info (2/3 width) */}
@@ -514,6 +586,32 @@ const CourseDetails = () => {
                       </h3>
                       <p className="text-gray-600 bg-gray-50 p-4 rounded-lg">
                         {currentCourse.requirements}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* NEW: Course Breakdown Display */}
+                  {currentCourse?.courseBreakdown && (
+                    <div className="mt-6">
+                      <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <BookOpen className="w-4 h-4 mr-1 text-gray-500" />
+                        Course Breakdown
+                      </h3>
+                      <p className="text-gray-600 bg-gray-50 p-4 rounded-lg whitespace-pre-line">
+                        {currentCourse.courseBreakdown}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* NEW: Additional Notes */}
+                  {currentCourse?.notes && (
+                    <div className="mt-6">
+                      <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                        <FileText className="w-4 h-4 mr-1 text-gray-500" />
+                        Additional Notes
+                      </h3>
+                      <p className="text-gray-600 bg-gray-50 p-4 rounded-lg">
+                        {currentCourse.notes}
                       </p>
                     </div>
                   )}
@@ -615,6 +713,71 @@ const CourseDetails = () => {
 
             {/* Right Column - Sidebar (1/3 width) */}
             <div className="space-y-6">
+              {/* Course Type Card - UPDATED with CNA */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Building className="w-5 h-5 mr-2 text-purple-600" />
+                    Course Type
+                  </h3>
+                </div>
+                <div className="p-6">
+                  <div className={`p-4 rounded-lg ${courseTypeConfig.bgColor}`}>
+                    <div className="flex items-center space-x-3">
+                      <CourseTypeIcon className={`w-8 h-8 ${courseTypeConfig.iconColor}`} />
+                      <div>
+                        <p className={`text-lg font-bold ${courseTypeConfig.iconColor}`}>
+                          {courseTypeConfig.label}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {currentCourse?.courseType === 'cna' ? 'Healthcare Program' : 'Technical Program'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Course Price Card */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Course Fee</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-2">
+                      {formatCurrency(currentCourse?.price || 0)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">per student</p>
+                  </div>
+                  <div className="p-3 bg-green-100 rounded-lg">
+                    <DollarSign className="w-6 h-6 text-green-600" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Workshop/Skills Lab Info - UPDATED with both flags */}
+              {(currentCourse?.workshopRequired || currentCourse?.skillsLabRequired) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <h4 className="text-sm font-medium text-blue-800 mb-2 flex items-center">
+                    <Wrench className="w-4 h-4 mr-2" />
+                    Facility Requirements
+                  </h4>
+                  <div className="space-y-2">
+                    {currentCourse?.workshopRequired && (
+                      <div className="flex items-center text-sm text-blue-700">
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Workshop Required
+                      </div>
+                    )}
+                    {currentCourse?.skillsLabRequired && (
+                      <div className="flex items-center text-sm text-blue-700">
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Skills Lab Required
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Stats Cards */}
               <div className="grid grid-cols-1 gap-4">
                 {/* Enrollment Stats */}
@@ -715,6 +878,16 @@ const CourseDetails = () => {
                       <UserPlus className="w-4 h-4 mr-2" />
                       Manage Enrollments
                     </button>
+
+                    {['admin', 'receptionist'].includes(user?.role) && (
+                      <button
+                        onClick={handleViewCourseFees}
+                        className="w-full flex items-center justify-center px-4 py-3 border border-green-300 rounded-lg text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors"
+                      >
+                        <DollarSign className="w-4 h-4 mr-2" />
+                        View Course Fees
+                      </button>
+                    )}
 
                     {['admin', 'instructor'].includes(user?.role) && (
                       <>
@@ -852,6 +1025,7 @@ const CourseDetails = () => {
           </div>
         )}
 
+        {/* Grades Tab - Keep existing */}
         {activeTab === 'grades' && (
           <div className="space-y-6">
             {/* Grades Header */}
@@ -878,7 +1052,6 @@ const CourseDetails = () => {
               </div>
             </div>
 
-            {/* Grades Table */}
             <GradeTable
               grades={courseGrades}
               loading={gradesLoading}
@@ -898,6 +1071,109 @@ const CourseDetails = () => {
         {activeTab === 'statistics' && (
           <div className="space-y-6">
             <GradeStatistics courseId={id} view="course" />
+          </div>
+        )}
+
+        {activeTab === 'fees' && (
+          <div className="space-y-6">
+            {/* Fee Overview Card */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <DollarSign className="w-5 h-5 mr-2 text-green-600" />
+                    Course Fee Overview
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Fee collection status for this course
+                  </p>
+                </div>
+                <div className="mt-4 sm:mt-0">
+                  <button
+                    onClick={handleViewCourseFees}
+                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 transition-all"
+                  >
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Full Fee Details
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Fee Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-sm text-gray-600 mb-2">Course Price</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(currentCourse?.price || 0)}
+                </p>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-sm text-gray-600 mb-2">Expected Revenue</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {formatCurrency(expectedRevenue)}
+                </p>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-sm text-gray-600 mb-2">Total Collected</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {formatCurrency(totalCollected)}
+                </p>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-sm text-gray-600 mb-2">Collection Rate</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {collectionRate}%
+                </p>
+              </div>
+            </div>
+
+            {/* Collection Progress Bar */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">
+                  Collection Progress
+                </span>
+                <span className="text-sm font-medium text-gray-900">
+                  {formatCurrency(totalCollected)} / {formatCurrency(expectedRevenue)} ({collectionRate}%)
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3">
+                <div
+                  className={`h-3 rounded-full transition-all duration-500 ${
+                    collectionRate >= 100 ? 'bg-green-500' :
+                    collectionRate >= 75 ? 'bg-blue-500' :
+                    collectionRate >= 50 ? 'bg-yellow-500' :
+                    collectionRate >= 25 ? 'bg-orange-500' :
+                    'bg-red-500'
+                  }`}
+                  style={{ width: `${Math.min(100, collectionRate)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Quick Info */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <div className="flex items-start">
+                <DollarSign className="w-5 h-5 text-blue-600 mt-0.5 mr-3" />
+                <div>
+                  <h4 className="text-sm font-medium text-blue-800">Payment Information</h4>
+                  <p className="text-sm text-blue-700 mt-1">
+                    View detailed fee breakdown and payment history for each student in this course.
+                  </p>
+                  <button
+                    onClick={handleViewCourseFees}
+                    className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center"
+                  >
+                    Go to Course Fees
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

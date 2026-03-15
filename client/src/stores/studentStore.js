@@ -1,3 +1,4 @@
+// src/stores/studentStore.js
 import { create } from "zustand";
 import { studentAPI } from "../services/studentAPI";
 import toast from "react-hot-toast";
@@ -10,7 +11,7 @@ export const useStudentStore = create((set, get) => ({
   error: null,
   searchTerm: "",
   studentCount: 0,
-  pollingInterval: null, // ADDED: For polling management
+  pollingInterval: null,
   pagination: {
     current: 1,
     total: 1,
@@ -18,7 +19,7 @@ export const useStudentStore = create((set, get) => ({
     limit: 10,
   },
 
-  // Actions
+  // Fetch all students with pagination and search
   fetchStudents: async (page = 1, limit = 10, search = "") => {
     set({ loading: true, error: null });
 
@@ -43,60 +44,13 @@ export const useStudentStore = create((set, get) => ({
         error.response?.data?.message || "Failed to fetch students";
       set({ error: errorMessage, loading: false });
 
-      // Only show toast for unexpected errors, not for empty results
       if (error.response?.status !== 404) {
         toast.error(errorMessage);
       }
     }
   },
 
-  // UPDATED: Fixed to only update if count changed
-  fetchStudentCount: async () => {
-    try {
-      const response = await studentAPI.getStudentCount();
-      const newCount = response.data.data?.count || 0;
-      
-      // Only update state if the count actually changed
-      if (get().studentCount !== newCount) {
-        set({ studentCount: newCount });
-      }
-      
-      return newCount;
-    } catch (error) {
-      // Silent fail for polling
-      console.warn("Failed to fetch student count:", error);
-      return get().studentCount; // Return current count on error
-    }
-  },
-
-  // ADDED: Start polling for student count
-  startPolling: () => {
-    // Clear any existing interval
-    if (get().pollingInterval) {
-      clearInterval(get().pollingInterval);
-    }
-    
-    // Poll every 60 seconds (less frequent than notifications)
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        get().fetchStudentCount();
-      }
-    }, 60000); // 60 seconds
-    
-    set({ pollingInterval: interval });
-    
-    // Initial fetch
-    get().fetchStudentCount();
-  },
-  
-  // ADDED: Stop polling
-  stopPolling: () => {
-    if (get().pollingInterval) {
-      clearInterval(get().pollingInterval);
-      set({ pollingInterval: null });
-    }
-  },
-
+  // Fetch single student by ID
   fetchStudent: async (id) => {
     set({ loading: true, error: null });
 
@@ -125,20 +79,84 @@ export const useStudentStore = create((set, get) => ({
     }
   },
 
+  // NEW: Fetch student with enrollments (includes course data)
+  fetchStudentWithEnrollments: async (id) => {
+    set({ loading: true, error: null });
+
+    try {
+      const response = await studentAPI.getStudentWithEnrollments(id);
+      const student = response.data.data;
+
+      set({
+        currentStudent: student,
+        loading: false,
+      });
+
+      return { success: true, data: student };
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message || "Failed to fetch student with enrollments";
+      set({ error: errorMessage, loading: false });
+
+      if (error.response?.status === 404) {
+        toast.error("Student not found");
+      } else {
+        toast.error(errorMessage);
+      }
+
+      return { success: false, message: errorMessage };
+    }
+  },
+
+  // Fetch student count for sidebar
+  fetchStudentCount: async () => {
+    try {
+      const response = await studentAPI.getStudentCount();
+      const newCount = response.data.data?.count || 0;
+      
+      if (get().studentCount !== newCount) {
+        set({ studentCount: newCount });
+      }
+      
+      return newCount;
+    } catch (error) {
+      console.warn("Failed to fetch student count:", error);
+      return get().studentCount;
+    }
+  },
+
+  // Start polling for student count
+  startPolling: () => {
+    if (get().pollingInterval) {
+      clearInterval(get().pollingInterval);
+    }
+    
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        get().fetchStudentCount();
+      }
+    }, 60000); // 60 seconds
+    
+    set({ pollingInterval: interval });
+    get().fetchStudentCount();
+  },
+  
+  // Stop polling
+  stopPolling: () => {
+    if (get().pollingInterval) {
+      clearInterval(get().pollingInterval);
+      set({ pollingInterval: null });
+    }
+  },
+
+  // Create new student
   createStudent: async (studentData) => {
     set({ loading: true, error: null });
 
     try {
-      // Ensure role is set to 'student'
-      const dataToSend = {
-        ...studentData,
-        role: "student",
-      };
-
-      const response = await studentAPI.createStudent(dataToSend);
+      const response = await studentAPI.createStudent(studentData);
       const newStudent = response.data.data;
 
-      // Update the local state optimistically
       const { students, pagination, studentCount } = get();
       const updatedStudents = [newStudent, ...students];
 
@@ -161,7 +179,6 @@ export const useStudentStore = create((set, get) => ({
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.response?.data?.errors) {
-        // Handle validation errors from backend
         const errors = error.response.data.errors;
         errorMessage = Object.values(errors).join(", ");
       }
@@ -172,6 +189,7 @@ export const useStudentStore = create((set, get) => ({
     }
   },
 
+  // Update student
   updateStudent: async (id, studentData) => {
     set({ loading: true, error: null });
 
@@ -179,10 +197,9 @@ export const useStudentStore = create((set, get) => ({
       const response = await studentAPI.updateStudent(id, studentData);
       const updatedStudent = response.data.data;
 
-      // Update in the local state
       const { students } = get();
       const updatedStudents = students.map((student) =>
-        student._id === id ? updatedStudent : student,
+        student._id === id ? updatedStudent : student
       );
 
       set({
@@ -199,7 +216,6 @@ export const useStudentStore = create((set, get) => ({
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.response?.data?.errors) {
-        // Handle validation errors from backend
         const errors = error.response.data.errors;
         errorMessage = Object.values(errors).join(", ");
       }
@@ -210,13 +226,13 @@ export const useStudentStore = create((set, get) => ({
     }
   },
 
+  // Delete student
   deleteStudent: async (id) => {
     set({ loading: true, error: null });
 
     try {
       await studentAPI.deleteStudent(id);
 
-      // Remove from local state
       const { students, pagination, studentCount } = get();
       const filteredStudents = students.filter((student) => student._id !== id);
 
@@ -241,15 +257,136 @@ export const useStudentStore = create((set, get) => ({
     }
   },
 
+  // Get student fee summary
+  fetchStudentFees: async (id) => {
+    set({ loading: true, error: null });
+
+    try {
+      const response = await studentAPI.getStudentFees(id);
+      
+      set({
+        studentFeeSummary: response.data.data,
+        loading: false,
+      });
+
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message || "Failed to fetch student fees";
+      set({ error: errorMessage, loading: false });
+      toast.error(errorMessage);
+      return { success: false, message: errorMessage };
+    }
+  },
+
+  // Get student payment history
+  fetchStudentPayments: async (id, params = {}) => {
+    set({ loading: true, error: null });
+
+    try {
+      const response = await studentAPI.getStudentPayments(id, params);
+      
+      set({
+        studentPayments: response.data.data,
+        paymentsPagination: response.data.pagination,
+        loading: false,
+      });
+
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message || "Failed to fetch student payments";
+      set({ error: errorMessage, loading: false });
+      return { success: false, message: errorMessage };
+    }
+  },
+
+  // Get student attendance summary
+  fetchStudentAttendance: async (id, params = {}) => {
+    set({ loading: true, error: null });
+
+    try {
+      const response = await studentAPI.getStudentAttendance(id, params);
+      
+      set({
+        studentAttendance: response.data.data,
+        loading: false,
+      });
+
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message || "Failed to fetch student attendance";
+      set({ error: errorMessage, loading: false });
+      return { success: false, message: errorMessage };
+    }
+  },
+
+  // Get student grades
+  fetchStudentGrades: async (id, params = {}) => {
+    set({ loading: true, error: null });
+
+    try {
+      const response = await studentAPI.getStudentGrades(id, params);
+      
+      set({
+        studentGrades: response.data.data,
+        loading: false,
+      });
+
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message || "Failed to fetch student grades";
+      set({ error: errorMessage, loading: false });
+      return { success: false, message: errorMessage };
+    }
+  },
+
+  // Set search term
   setSearchTerm: (searchTerm) => {
     set({ searchTerm });
   },
 
+  // Clear error
   clearError: () => {
     set({ error: null });
   },
 
+  // Clear current student
   clearCurrentStudent: () => {
     set({ currentStudent: null });
   },
+
+  // Clear all student data
+  clearAllStudents: () => {
+    set({
+      students: [],
+      currentStudent: null,
+      studentFeeSummary: null,
+      studentPayments: [],
+      studentAttendance: null,
+      studentGrades: [],
+      loading: false,
+      error: null,
+    });
+  },
+
+  // Reset store
+  resetStudentStore: () => {
+    set({
+      students: [],
+      currentStudent: null,
+      loading: false,
+      error: null,
+      searchTerm: "",
+      studentCount: 0,
+      pagination: {
+        current: 1,
+        total: 1,
+        results: 0,
+        limit: 10,
+      },
+    });
+  }
 }));

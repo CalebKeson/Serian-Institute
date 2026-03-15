@@ -410,6 +410,7 @@ export const updateAttendance = async (req, res, next) => {
 
 // @desc    Get attendance statistics
 // @route   GET /api/attendance/stats
+// @access  Private (Admin, Instructor)
 export const getAttendanceStats = async (req, res, next) => {
   try {
     const { courseId, studentId, startDate, endDate } = req.query;
@@ -420,10 +421,7 @@ export const getAttendanceStats = async (req, res, next) => {
 
     const start = new Date(startDate);
     const end = new Date(endDate);
-
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return next(errorHandler(400, 'Invalid date format'));
-    }
+    end.setHours(23, 59, 59, 999);
 
     let stats;
 
@@ -462,7 +460,39 @@ export const getAttendanceStats = async (req, res, next) => {
         attendanceRate: total > 0 ? ((present + excused) / total) * 100 : 0
       }];
     } else {
-      return next(errorHandler(400, 'Either courseId or studentId is required'));
+      // Global statistics for dashboard
+      const totalRecords = await Attendance.countDocuments({
+        date: { $gte: start, $lte: end }
+      });
+      
+      const present = await Attendance.countDocuments({
+        date: { $gte: start, $lte: end },
+        status: 'present'
+      });
+      
+      const absent = await Attendance.countDocuments({
+        date: { $gte: start, $lte: end },
+        status: 'absent'
+      });
+      
+      const late = await Attendance.countDocuments({
+        date: { $gte: start, $lte: end },
+        status: 'late'
+      });
+      
+      const excused = await Attendance.countDocuments({
+        date: { $gte: start, $lte: end },
+        status: 'excused'
+      });
+
+      stats = [{
+        total: totalRecords,
+        present,
+        absent,
+        late,
+        excused,
+        attendanceRate: totalRecords > 0 ? ((present + excused) / totalRecords) * 100 : 0
+      }];
     }
 
     res.json({

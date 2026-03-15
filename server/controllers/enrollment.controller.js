@@ -128,6 +128,43 @@ export const enrollStudent = async (req, res, next) => {
       await course.save({ session });
     }
 
+    // ============= NEW: Initialize Student Fee Record =============
+    // Import StudentFee model
+    const StudentFee = (await import('../models/studentFee.model.js')).default;
+    
+    // Find or create student fee record
+    let studentFee = await StudentFee.findOne({ student: studentId }).session(session);
+    
+    if (!studentFee) {
+      // Create new fee record for this student
+      studentFee = await StudentFee.create([{
+        student: studentId,
+        courses: [{
+          course: courseId,
+          coursePrice: course.price,
+          totalPaid: 0,
+          payments: []
+        }]
+      }], { session });
+    } else {
+      // Check if this course is already in their fees
+      const courseExistsInFees = studentFee.courses.some(
+        c => c.course.toString() === courseId.toString()
+      );
+      
+      if (!courseExistsInFees) {
+        // Add the course to their fees
+        studentFee.courses.push({
+          course: courseId,
+          coursePrice: course.price,
+          totalPaid: 0,
+          payments: []
+        });
+        await studentFee.save({ session });
+      }
+    }
+    // ============= END NEW CODE =============
+
     await session.commitTransaction();
     session.endSession();
 
@@ -140,7 +177,7 @@ export const enrollStudent = async (req, res, next) => {
           select: 'name email'
         }
       })
-      .populate('course', 'courseCode name maxStudents instructor')
+      .populate('course', 'courseCode name maxStudents instructor price') // Added price to selection
       .populate('enrolledBy', 'name email');
 
     // ============= NOTIFICATION: Student Enrolled =============
@@ -149,11 +186,12 @@ export const enrollStudent = async (req, res, next) => {
       const studentName = student.user?.name || 'A student';
       const courseName = course.name;
       const courseCode = course.courseCode;
+      const coursePrice = course.price;
 
       // 1. NOTIFY ADMINS - New enrollment
       await NotificationService.createForRole('admin', {
         title: isReenrollment ? '🔄 Student Re-enrolled' : '🎓 New Course Enrollment',
-        message: `${studentName} has been ${isReenrollment ? 're-enrolled' : 'enrolled'} in ${courseCode} - ${courseName} by ${req.user.name || 'a staff member'}.`,
+        message: `${studentName} has been ${isReenrollment ? 're-enrolled' : 'enrolled'} in ${courseCode} - ${courseName}. Course fee: KSh ${coursePrice?.toLocaleString() || '0'}`,
         type: 'course',
         actionUrl: `/courses/${courseId}/enrollments`
       });
@@ -169,11 +207,11 @@ export const enrollStudent = async (req, res, next) => {
         });
       }
 
-      // 3. NOTIFY THE STUDENT - Welcome to course
+      // 3. NOTIFY THE STUDENT - Welcome to course with fee information
       if (student.user && student.user._id) {
         const welcomeMessage = isReenrollment 
-          ? `You have been successfully re-enrolled in ${courseCode} - ${courseName}. Welcome back!`
-          : `You have been successfully enrolled in ${courseCode} - ${courseName}. Your journey begins ${course.intakeMonth} ${course.intakeYear}.`;
+          ? `You have been successfully re-enrolled in ${courseCode} - ${courseName}. Welcome back! Course fee: KSh ${coursePrice?.toLocaleString() || '0'}`
+          : `You have been successfully enrolled in ${courseCode} - ${courseName}. Your journey begins ${course.intakeMonth} ${course.intakeYear}. Course fee: KSh ${coursePrice?.toLocaleString() || '0'}`;
 
         await NotificationService.createNotification({
           recipientId: student.user._id,
@@ -188,11 +226,26 @@ export const enrollStudent = async (req, res, next) => {
       console.error('Failed to send enrollment notifications:', notificationError);
     }
 
+    // ============= ENHANCED RESPONSE with fee info =============
+    // Get the updated student fee record to return with response
+    const updatedStudentFee = await StudentFee.findOne({ student: studentId })
+      .populate('courses.course', 'courseCode name price');
+
     res.status(201).json({
       success: true,
       data: {
         enrollment: populatedEnrollment,
-        course
+        course: {
+          ...course.toObject(),
+          formattedPrice: `KSh ${course.price?.toLocaleString() || '0'}`
+        },
+        feeSummary: updatedStudentFee ? {
+          totalFees: updatedStudentFee.totalFees,
+          totalPaid: updatedStudentFee.totalPaid,
+          totalBalance: updatedStudentFee.totalBalance,
+          overallPercentage: updatedStudentFee.overallPercentage,
+          courseBreakdown: updatedStudentFee.courseBreakdown
+        } : null
       },
       message: isReenrollment ? 'Student re-enrolled successfully' : 'Student enrolled successfully'
     });
@@ -799,6 +852,7 @@ export const bulkEnrollStudents = async (req, res, next) => {
 
 // @desc    Get enrollment statistics
 // @route   GET /api/enrollments/stats
+// @access  Private (Admin, Instructor)
 export const getEnrollmentStats = async (req, res, next) => {
   try {
     const stats = await Enrollment.aggregate([
@@ -823,14 +877,27 @@ export const getEnrollmentStats = async (req, res, next) => {
       status: 'enrolled'
     });
 
+    // Get this month's enrollments
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnrollments = await Enrollment.countDocuments({
+      enrollmentDate: { $gte: startOfMonth }
+    });
+
+    // Format the stats
+    const formattedStats = {
+      total: await Enrollment.countDocuments(),
+      active: activeEnrollments,
+      today: todayEnrollments,
+      thisMonth: monthEnrollments,
+      byStatus: stats.reduce((acc, stat) => {
+        acc[stat._id] = stat.count;
+        return acc;
+      }, {})
+    };
+
     res.json({
       success: true,
-      data: {
-        byStatus: stats,
-        total: await Enrollment.countDocuments(),
-        today: todayEnrollments,
-        active: activeEnrollments
-      }
+      data: formattedStats
     });
 
   } catch (error) {

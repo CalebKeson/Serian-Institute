@@ -1,4 +1,4 @@
-// src/pages/Courses/Courses.jsx - UPDATED VERSION
+// src/pages/Courses/Courses.jsx - UPDATED WITH CNA
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
 import {
@@ -19,6 +19,7 @@ import {
   Cpu,
   Users,
   Award,
+  HeartPulse // ADD THIS for CNA
 } from "lucide-react";
 import Layout from "../../components/Layout/Layout";
 import CourseTable from "../../components/Courses/CourseTable";
@@ -108,12 +109,13 @@ const Courses = () => {
     setDeleteConfirm(null);
   };
 
-  // Data options based on your Course model
+  // Data options - UPDATED with CNA
   const courseTypes = [
     { value: "driving", label: "Driving Classes", icon: Car },
     { value: "plumbing", label: "Plumbing", icon: Droplets },
     { value: "electrical", label: "Electrical", icon: Zap },
     { value: "computer", label: "Computer", icon: Cpu },
+    { value: "cna", label: "Nursing Assistant", icon: HeartPulse } // ADDED
   ];
 
   const intakeMonths = [
@@ -133,15 +135,12 @@ const Courses = () => {
 
   const statusOptions = ["active", "inactive", "completed", "cancelled"];
 
-  // Replace the calculateStats function in Courses.jsx with this:
-
   const calculateStats = () => {
     const totalCourses = pagination.results || 0;
     const activeCourses = courses.filter((c) => c.status === "active").length;
 
     // Calculate total enrolled students across all courses
     const totalEnrolled = courses.reduce((total, course) => {
-      // Handle both populated enrolledStudents and count from virtual field
       const enrolledCount =
         course.enrolledCount || course.enrolledStudents?.length || 0;
       return total + enrolledCount;
@@ -301,7 +300,7 @@ const Courses = () => {
             </div>
           </div>
 
-          {/* Advanced Filters */}
+          {/* Advanced Filters - UPDATED with CNA */}
           {showFilters && (
             <div className="border-t border-gray-200 pt-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

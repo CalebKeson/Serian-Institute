@@ -21,13 +21,13 @@ import ResetPassword from "./pages/Auth/ResetPassword";
 // Dashboard
 import Dashboard from "./pages/Dashboard/Dashboard";
 
-// Student Components (from your uploads)
+// Student Components
 import Students from "./components/Students/Students";
 import AddStudent from "./components/Students/AddStudent";
 import EditStudent from "./components/Students/EditStudent";
 import StudentProfile from "./components/Students/StudentProfile";
 
-// Course Components (from your uploads)
+// Course Components
 import Courses from "./components/Courses/Courses";
 import AddCourse from "./components/Courses/AddCourse";
 import EditCourse from "./components/Courses/EditCourse";
@@ -37,14 +37,24 @@ import CourseEnrollments from "./components/Courses/CourseEnrollments";
 // Grades Components
 import GradesOverview from "./pages/Grades/GradesOverview";
 
-// Other pages
+// Attendance Components
 import CourseAttendance from "./components/Attendance/CourseAttendance";
-import Requests from "./pages/Requests/Requests";
+import AttendanceCourseSelection from './pages/Attendance/AttendanceCourseSelection';
+
+// ============= NEW FEE PAGES IMPORTS =============
+import Fees from "./components/Fees/Fees";
+import StudentFees from "./components/Fees/StudentFees";
+import CourseFees from "./components/Fees/CourseFees";
+import RecordPayment from "./components/Fees/RecordPayment";
+import PaymentHistory from "./components/Fees/PaymentHistory";
+import FeeReports from "./components/Fees/FeeReports";
+
+// Other pages
+import Requests from "./components/Requests/Requests";
 import RequestDetails from "./components/Requests/RequestDetails";
 import Profile from "./pages/Profile/Profile";
 import Settings from "./pages/Settings/Settings";
 import Notifications from "./pages/Notifications/Notifications";
-import AttendanceCourseSelection from './pages/Attendance/AttendanceCourseSelection';
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -75,44 +85,40 @@ const RoleRoute = ({ children, allowedRoles = [] }) => {
 
 const AppRouter = () => {
   const initialize = useAuthStore((state) => state.initialize);
-  const user = useAuthStore((state) => state.user); // Get user state
+  const user = useAuthStore((state) => state.user);
 
   const { startPolling, stopPolling } = useNotificationStore();
   const { startPolling: startRequestPolling, stopPolling: stopRequestPolling } =
     useRequestStore();
   const { startPolling: startStudentPolling, stopPolling: stopStudentPolling } =
-    useStudentStore(); // Student store polling
+    useStudentStore();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
   useEffect(() => {
-    // Only start polling if user is logged in
     if (user) {
       startPolling();
       startRequestPolling();
 
-      // Start student polling only for users who can see students
-      if (user.role === "admin" || user.role === "instructor" || user.role === "receptionist") {
+      if (["admin", "instructor", "receptionist"].includes(user.role)) {
         startStudentPolling();
       } else {
-        stopStudentPolling(); // Ensure it's stopped if not needed
+        stopStudentPolling();
       }
     } else {
-      // Stop all polling when user is not logged in
       stopPolling();
       stopRequestPolling();
       stopStudentPolling();
     }
 
-    // Clean up on unmount or when user changes
     return () => {
       stopPolling();
       stopRequestPolling();
       stopStudentPolling();
     };
-  }, [user]); // Re-run effect when user changes
+  }, [user]);
 
   const router = createBrowserRouter(
     createRoutesFromElements(
@@ -161,7 +167,7 @@ const AppRouter = () => {
           }
         />
 
-        {/* Student Management Routes */}
+        {/* ============= STUDENT MANAGEMENT ROUTES ============= */}
         <Route
           path="/students"
           element={
@@ -195,7 +201,7 @@ const AppRouter = () => {
           }
         />
 
-        {/* Course Management Routes */}
+        {/* ============= COURSE MANAGEMENT ROUTES ============= */}
         <Route
           path="/courses"
           element={
@@ -253,7 +259,7 @@ const AppRouter = () => {
           }
         />
 
-        {/* Grades Management Routes */}
+        {/* ============= GRADES MANAGEMENT ROUTES ============= */}
         <Route
           path="/grades"
           element={
@@ -263,7 +269,69 @@ const AppRouter = () => {
           }
         />
 
-        {/* Request Management Routes */}
+        {/* ============= NEW FEE MANAGEMENT ROUTES ============= */}
+        
+        {/* Main Fees Dashboard */}
+        <Route
+          path="/fees"
+          element={
+            <RoleRoute allowedRoles={["admin", "receptionist"]}>
+              <Fees />
+            </RoleRoute>
+          }
+        />
+
+        {/* Student-specific Fee Views */}
+        <Route
+          path="/fees/student/:studentId"
+          element={
+            <RoleRoute allowedRoles={["admin", "receptionist"]}>
+              <StudentFees />
+            </RoleRoute>
+          }
+        />
+
+        {/* Course-specific Fee Views */}
+        <Route
+          path="/fees/course/:courseId"
+          element={
+            <RoleRoute allowedRoles={["admin", "receptionist"]}>
+              <CourseFees />
+            </RoleRoute>
+          }
+        />
+
+        {/* Record Payment Page */}
+        <Route
+          path="/fees/record-payment"
+          element={
+            <RoleRoute allowedRoles={["admin", "receptionist"]}>
+              <RecordPayment />
+            </RoleRoute>
+          }
+        />
+
+        {/* Payment History */}
+        <Route
+          path="/fees/history"
+          element={
+            <RoleRoute allowedRoles={["admin", "receptionist"]}>
+              <PaymentHistory />
+            </RoleRoute>
+          }
+        />
+
+        {/* Fee Reports */}
+        <Route
+          path="/fees/reports"
+          element={
+            <RoleRoute allowedRoles={["admin", "receptionist"]}>
+              <FeeReports />
+            </RoleRoute>
+          }
+        />
+
+        {/* ============= REQUEST MANAGEMENT ROUTES ============= */}
         <Route
           path="/requests"
           element={
@@ -281,7 +349,7 @@ const AppRouter = () => {
           }
         />
 
-        {/* User Profile & Settings */}
+        {/* ============= USER PROFILE & SETTINGS ============= */}
         <Route
           path="/profile"
           element={
@@ -307,7 +375,7 @@ const AppRouter = () => {
           }
         />
 
-        {/* Default Redirects */}
+        {/* ============= DEFAULT REDIRECTS ============= */}
         <Route path="/" element={<Navigate to="/dashboard" />} />
         <Route path="*" element={<Navigate to="/dashboard" />} />
       </Route>,

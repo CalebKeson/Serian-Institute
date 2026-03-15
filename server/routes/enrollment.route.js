@@ -6,7 +6,8 @@ import {
   getCourseEnrollments, 
   getStudentEnrollments,
   updateEnrollmentStatus,
-  bulkEnrollStudents
+  bulkEnrollStudents,
+  getEnrollmentStats
 } from '../controllers/enrollment.controller.js';
 import { auth, adminAuth, instructorAuth } from '../middleware/auth.js';
 
@@ -24,5 +25,6 @@ router.post('/bulk', instructorAuth, bulkEnrollStudents);
 // Get enrollments (accessible to all authenticated users)
 router.get('/course/:id', getCourseEnrollments);
 router.get('/student/:id', getStudentEnrollments);
+router.get('/stats', auth, instructorAuth, getEnrollmentStats);
 
 export default router;

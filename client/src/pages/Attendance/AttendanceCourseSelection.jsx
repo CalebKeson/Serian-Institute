@@ -1,4 +1,4 @@
-// src/pages/Attendance/AttendanceCourseSelection.jsx
+// src/pages/Attendance/AttendanceCourseSelection.jsx - UPDATED WITH CNA
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { 
@@ -13,6 +13,7 @@ import {
   Droplets,
   Zap,
   Cpu,
+  HeartPulse, // ADD THIS for CNA
   ChevronRight,
   Loader
 } from 'lucide-react';
@@ -60,31 +61,37 @@ const AttendanceCourseSelection = () => {
     navigate(`/courses/${courseId}/attendance`);
   };
 
+  // UPDATED: Added CNA to course type icons
   const getCourseTypeIcon = (courseType) => {
     const icons = {
       driving: Car,
       plumbing: Droplets,
       electrical: Zap,
-      computer: Cpu
+      computer: Cpu,
+      cna: HeartPulse // ADDED
     };
     return icons[courseType] || BookOpen;
   };
 
+  // UPDATED: Added CNA to course type colors
   const getCourseTypeColor = (courseType) => {
     const colors = {
       driving: 'bg-red-100 text-red-600 border-red-200',
       plumbing: 'bg-blue-100 text-blue-600 border-blue-200',
       electrical: 'bg-yellow-100 text-yellow-600 border-yellow-200',
-      computer: 'bg-purple-100 text-purple-600 border-purple-200'
+      computer: 'bg-purple-100 text-purple-600 border-purple-200',
+      cna: 'bg-pink-100 text-pink-600 border-pink-200' // ADDED
     };
     return colors[courseType] || 'bg-gray-100 text-gray-600 border-gray-200';
   };
 
+  // UPDATED: Added CNA to course types
   const courseTypes = [
     { value: 'driving', label: 'Driving Classes', icon: Car },
     { value: 'plumbing', label: 'Plumbing', icon: Droplets },
     { value: 'electrical', label: 'Electrical', icon: Zap },
-    { value: 'computer', label: 'Computer', icon: Cpu }
+    { value: 'computer', label: 'Computer', icon: Cpu },
+    { value: 'cna', label: 'Nursing Assistant', icon: HeartPulse } // ADDED
   ];
 
   return (
@@ -133,7 +140,7 @@ const AttendanceCourseSelection = () => {
               </button>
             </div>
 
-            {/* Type Filter */}
+            {/* Type Filter - UPDATED with CNA */}
             {showFilters && (
               <div className="border-t border-gray-200 pt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -204,7 +211,7 @@ const AttendanceCourseSelection = () => {
                   className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all cursor-pointer group"
                 >
                   <div className="p-6">
-                    {/* Header with Icon */}
+                    {/* Header with Icon - UPDATED colors for CNA */}
                     <div className="flex items-start justify-between mb-4">
                       <div className={`p-3 rounded-lg ${typeColorClass}`}>
                         <CourseIcon className="w-6 h-6" />

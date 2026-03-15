@@ -1,10 +1,12 @@
+// src/components/Layout/Sidebar.jsx
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router";
 import { useAuthStore } from "../../stores/authStore";
 import { useNotificationStore } from "../../stores/notificationStore";
 import { useRequestStore } from "../../stores/requestStore";
 import { useStudentStore } from "../../stores/studentStore";
-import { useCourseStore } from "../../stores/courseStore"; // ADD THIS IMPORT
+import { useCourseStore } from "../../stores/courseStore";
+import { usePaymentStore } from "../../stores/paymentStore";
 import {
   LayoutDashboard,
   Users,
@@ -17,43 +19,90 @@ import {
   Settings,
   ChevronDown,
   ChevronUp,
+  DollarSign,
+  Receipt,
+  CreditCard,
 } from "lucide-react";
 
 const Sidebar = () => {
   const { user, logout } = useAuthStore();
   const location = useLocation();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showFeesMenu, setShowFeesMenu] = useState(false);
   const { unreadCount } = useNotificationStore();
   const { todayCount } = useRequestStore();
-  const { studentCount } = useStudentStore();
+  const { studentCount, fetchStudentCount } = useStudentStore();
   const {
     courseCount,
     startPolling: startCoursePolling,
     stopPolling: stopCoursePolling,
-  } = useCourseStore(); // ADD THIS
+    fetchCourseCount
+  } = useCourseStore();
+  
+  const { 
+    fetchOutstandingReport,
+    outstandingReport,
+    loading 
+  } = usePaymentStore();
 
-  // Fetch counts when component mounts
+  // FIXED: Immediate fetch on mount and after user actions
   useEffect(() => {
-    const initializeCounts = async () => {
-      try {
-        // Start polling for course count if user has access
-        if (["admin", "instructor", "receptionist"].includes(user?.role)) {
-          startCoursePolling();
-        }
-
-        // Other stores handle their own polling
-      } catch (error) {
-        console.warn("Initial count fetch failed:", error);
+    const loadInitialData = async () => {
+      if (["admin", "receptionist", "instructor"].includes(user?.role)) {
+        // Fetch all counts immediately
+        await Promise.all([
+          fetchStudentCount(),
+          fetchCourseCount(),
+          fetchOutstandingReport()
+        ]);
+        
+        // Start polling for real-time updates
+        startCoursePolling();
+        
+        // Set up event listeners for real-time updates
+        window.addEventListener('student-enrolled', handleDataChange);
+        window.addEventListener('payment-recorded', handleDataChange);
+        window.addEventListener('course-created', handleDataChange);
       }
     };
 
-    initializeCounts();
+    loadInitialData();
 
     return () => {
-      // Cleanup polling on unmount
       stopCoursePolling();
+      window.removeEventListener('student-enrolled', handleDataChange);
+      window.removeEventListener('payment-recorded', handleDataChange);
+      window.removeEventListener('course-created', handleDataChange);
     };
-  }, [user?.role, startCoursePolling, stopCoursePolling]);
+  }, [user?.role]);
+
+  // FIXED: Handler for real-time updates
+  const handleDataChange = async () => {
+    if (["admin", "receptionist", "instructor"].includes(user?.role)) {
+      await Promise.all([
+        fetchStudentCount(),
+        fetchCourseCount(),
+        fetchOutstandingReport()
+      ]);
+    }
+  };
+
+  // FIXED: Poll every 30 seconds instead of 5 minutes
+  useEffect(() => {
+    if (["admin", "receptionist", "instructor"].includes(user?.role)) {
+      const interval = setInterval(async () => {
+        if (document.visibilityState === 'visible') {
+          await Promise.all([
+            fetchStudentCount(),
+            fetchCourseCount(),
+            fetchOutstandingReport()
+          ]);
+        }
+      }, 30000); // 30 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [user?.role]);
 
   // Helper function to format large numbers for display
   const formatBadgeCount = (count) => {
@@ -61,6 +110,17 @@ const Sidebar = () => {
       return `${(count / 1000).toFixed(1)}k`;
     }
     return count;
+  };
+
+  // Format currency for badge
+  const formatOutstandingBadge = (amount) => {
+    if (amount >= 1000000) {
+      return `${(amount / 1000000).toFixed(1)}M`;
+    }
+    if (amount >= 1000) {
+      return `${(amount / 1000).toFixed(1)}k`;
+    }
+    return amount;
   };
 
   const navigation = [
@@ -81,27 +141,54 @@ const Sidebar = () => {
       name: "Students",
       href: "/students",
       icon: Users,
-      roles: ["admin", "teacher"],
+      roles: ["admin", "instructor", "receptionist"],
       badgeCount: studentCount || 0,
     },
     {
       name: "Courses",
       href: "/courses",
       icon: BookOpen,
-      roles: ["admin", "instructor", "receptionist"], // Updated roles
-      badgeCount: courseCount || 0, // ADD THIS
+      roles: ["admin", "instructor", "receptionist"],
+      badgeCount: courseCount || 0,
+    },
+    {
+      name: "Fees & Payments",
+      icon: DollarSign,
+      roles: ["admin", "receptionist"],
+      submenu: [
+        {
+          name: "Overview",
+          href: "/fees",
+          icon: DollarSign,
+        },
+        {
+          name: "Record Payment",
+          href: "/fees/record-payment",
+          icon: CreditCard,
+        },
+        {
+          name: "Payment History",
+          href: "/fees/history",
+          icon: Receipt,
+        },
+        {
+          name: "Fee Reports",
+          href: "/fees/reports",
+          icon: Award,
+        },
+      ],
     },
     {
       name: "Attendance",
       href: "/attendance",
       icon: ClipboardCheck,
-      roles: ["admin", "instructor"], // Updated roles
+      roles: ["admin", "instructor"],
     },
     {
       name: "Grades",
       href: "/grades",
       icon: Award,
-      roles: ["admin", "teacher", "student", "parent"],
+      roles: ["admin", "instructor", "student", "parent"],
     },
     {
       name: "Profile",
@@ -119,10 +206,14 @@ const Sidebar = () => {
   ];
 
   const filteredNavigation = navigation.filter((item) =>
-    item.roles.includes(user?.role),
+    item.roles.includes(user?.role)
   );
 
   const isActive = (path) => location.pathname === path;
+  
+  const isFeesActive = () => {
+    return location.pathname.startsWith('/fees');
+  };
 
   const getRoleColor = (role) => {
     switch (role) {
@@ -133,7 +224,7 @@ const Sidebar = () => {
       case "teacher":
         return "from-green-500 to-teal-600";
       case "instructor":
-        return "from-purple-500 to-indigo-600"; // ADD THIS
+        return "from-purple-500 to-indigo-600";
       case "student":
         return "from-indigo-500 to-blue-600";
       case "parent":
@@ -152,7 +243,7 @@ const Sidebar = () => {
       case "teacher":
         return "bg-green-100 text-green-800";
       case "instructor":
-        return "bg-purple-100 text-purple-800"; // ADD THIS
+        return "bg-purple-100 text-purple-800";
       case "student":
         return "bg-indigo-100 text-indigo-800";
       case "parent":
@@ -186,8 +277,64 @@ const Sidebar = () => {
             const IconComponent = item.icon;
             const hasBadge = item.badgeCount > 0;
             const isStudentItem = item.name === "Students";
-            const isCourseItem = item.name === "Courses"; // ADD THIS
+            const isCourseItem = item.name === "Courses";
 
+            // Handle items with submenus (Fees)
+            if (item.submenu) {
+              const isFeesActiveFlag = isFeesActive();
+              
+              return (
+                <div key={item.name} className="space-y-1">
+                  <button
+                    onClick={() => setShowFeesMenu(!showFeesMenu)}
+                    className={`flex items-center w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 group ${
+                      isFeesActiveFlag
+                        ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-2 border-blue-600"
+                        : "text-gray-600 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 hover:text-gray-900"
+                    }`}
+                  >
+                    <IconComponent className="w-5 h-5 mr-3 transition-transform duration-200 group-hover:scale-110" />
+                    <span className="flex-1 text-left">{item.name}</span>
+                    
+                    {/* FIXED: Show outstanding badge with real-time data */}
+                    {outstandingReport?.summary?.totalOutstanding > 0 && (
+                      <span className="ml-2 h-5 min-w-5 px-1 text-white text-xs rounded-full bg-orange-500 flex items-center justify-center">
+                        {formatOutstandingBadge(outstandingReport.summary.totalOutstanding)}
+                      </span>
+                    )}
+                    
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${
+                      showFeesMenu ? 'rotate-180' : ''
+                    }`} />
+                  </button>
+
+                  {/* Submenu Items */}
+                  {showFeesMenu && (
+                    <div className="ml-4 pl-4 border-l-2 border-gray-200 space-y-1">
+                      {item.submenu.map((subItem) => {
+                        const SubIcon = subItem.icon;
+                        return (
+                          <Link
+                            key={subItem.href}
+                            to={subItem.href}
+                            className={`flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 group ${
+                              isActive(subItem.href)
+                                ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700"
+                                : "text-gray-600 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 hover:text-gray-900"
+                            }`}
+                          >
+                            <SubIcon className="w-4 h-4 mr-3 transition-transform duration-200 group-hover:scale-110" />
+                            <span className="flex-1">{subItem.name}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Regular navigation items (no submenu)
             return (
               <Link
                 key={item.name}
@@ -201,14 +348,14 @@ const Sidebar = () => {
                 <IconComponent className="w-5 h-5 mr-3 transition-transform duration-200 group-hover:scale-110" />
                 <span className="flex-1">{item.name}</span>
 
-                {/* Badge for counts */}
+                {/* Badge for counts - FIXED: Shows real-time data */}
                 {hasBadge && (
                   <span
                     className={`ml-2 h-5 min-w-5 px-1 text-white text-xs rounded-full flex items-center justify-center ${
                       isStudentItem
                         ? "bg-blue-500"
                         : isCourseItem
-                          ? "bg-purple-500" // ADD THIS
+                          ? "bg-purple-500"
                           : "bg-red-500"
                     }`}
                   >

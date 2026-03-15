@@ -8,7 +8,8 @@ import {
   deleteStudent, 
   getStudentStats,
   getStudentCount,
-  getAvailableStudents
+  getAvailableStudents,
+  getStudentWithEnrollments
 } from '../controllers/student.controller.js';
 import { auth, adminAuth, instructorAuth } from '../middleware/auth.js';
 
@@ -16,6 +17,7 @@ const router = express.Router();
 
 router.get('/count', auth, getStudentCount);
 router.get('/', auth, getStudents);
+router.get('/:id/with-enrollments', auth, getStudentWithEnrollments);
 router.get('/:id', auth, getStudent);
 router.get('/stats', auth, instructorAuth, getStudentStats);
 router.get('/available/:courseId', auth, instructorAuth, getAvailableStudents);
