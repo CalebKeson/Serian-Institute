@@ -72,6 +72,31 @@ app.get("/", (req, res) => {
   });
 });
 
+app.get('/api/debug', async (req, res) => {
+  const mongoose = await import('mongoose');
+  
+  res.json({
+    status: 'server running',
+    timestamp: new Date().toISOString(),
+    env: {
+      mongodb_uri_exists: !!process.env.MONGODB_URI,
+      mongodb_uri_format: process.env.MONGODB_URI ? 
+        (process.env.MONGODB_URI.includes('mongodb+srv') ? 'srv' : 'standard') : null,
+      jwt_exists: !!process.env.JWT_SECRET,
+      node_env: process.env.NODE_ENV
+    },
+    mongoose: {
+      readyState: mongoose.default.connection.readyState,
+      states: {
+        0: 'disconnected',
+        1: 'connected', 
+        2: 'connecting',
+        3: 'disconnecting'
+      }
+    }
+  });
+});
+
 // ==================== EXISTING ROUTES ====================
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
