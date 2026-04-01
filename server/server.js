@@ -17,12 +17,12 @@ import dashboardRoutes from './routes/dashboard.route.js';
 import reportsRoutes from './routes/reports.route.js';
 
 // NEW: Income & Expense routes
-import incomeSourceRoutes from './routes/incomeSource.route.js'; 
-import incomeTransactionRoutes from './routes/incomeTransaction.route.js';
-import directorRoutes from './routes/director.route.js';
-import expenseCategoryRoutes from './routes/expenseCategory.route.js';
-import expenseRoutes from './routes/expense.route.js';
-import financialReportRoutes from './routes/financialReport.route.js';
+// import incomeSourceRoutes from './routes/incomeSource.route.js'; 
+// import incomeTransactionRoutes from './routes/incomeTransaction.route.js';
+// import directorRoutes from './routes/director.route.js';
+// import expenseCategoryRoutes from './routes/expenseCategory.route.js';
+// import expenseRoutes from './routes/expense.route.js';
+// import financialReportRoutes from './routes/financialReport.route.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -113,18 +113,18 @@ app.use('/api/reports', reportsRoutes);
 // ==================== NEW INCOME & EXPENSE ROUTES ====================
 
 // Income Management
-app.use('/api/income-sources', incomeSourceRoutes);
-app.use('/api/income', incomeTransactionRoutes);
+// app.use('/api/income-sources', incomeSourceRoutes);
+// app.use('/api/income', incomeTransactionRoutes);
 
-// Director Management
-app.use('/api/directors', directorRoutes);
+// // Director Management
+// app.use('/api/directors', directorRoutes);
 
-// Expense Management
-app.use('/api/expense-categories', expenseCategoryRoutes);
-app.use('/api/expenses', expenseRoutes);
+// // Expense Management
+// app.use('/api/expense-categories', expenseCategoryRoutes);
+// app.use('/api/expenses', expenseRoutes);
 
-// Financial Reports
-app.use('/api/financial', financialReportRoutes);
+// // Financial Reports
+// app.use('/api/financial', financialReportRoutes);
 
 // ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {
