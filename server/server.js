@@ -6,6 +6,7 @@ import connectDB from "./config/database.js";
 // Existing routes
 import authRoutes from './routes/auth.route.js';
 import studentRoutes from './routes/student.route.js';
+import instructorRoutes from './routes/instructor.route.js';
 import courseRoutes from './routes/course.route.js';
 import enrollmentRoutes from './routes/enrollment.route.js';
 import attendanceRoutes from './routes/attendance.route.js';
@@ -15,14 +16,15 @@ import gradeRoutes from './routes/grades.route.js';
 import paymentRoutes from './routes/payment.route.js';
 import dashboardRoutes from './routes/dashboard.route.js';
 import reportsRoutes from './routes/reports.route.js';
+import eventRoutes from './routes/event.route.js';
 
 // NEW: Income & Expense routes
-// import incomeSourceRoutes from './routes/incomeSource.route.js'; 
-// import incomeTransactionRoutes from './routes/incomeTransaction.route.js';
-// import directorRoutes from './routes/director.route.js';
-// import expenseCategoryRoutes from './routes/expenseCategory.route.js';
-// import expenseRoutes from './routes/expense.route.js';
-// import financialReportRoutes from './routes/financialReport.route.js';
+import incomeSourceRoutes from './routes/incomeSource.route.js'; 
+import incomeTransactionRoutes from './routes/incomeTransaction.route.js';
+import directorRoutes from './routes/director.route.js';
+import expenseCategoryRoutes from './routes/expenseCategory.route.js';
+import expenseRoutes from './routes/expense.route.js';
+import financialReportRoutes from './routes/financialReport.route.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,6 +34,7 @@ connectDB();
 
 // ==================== CORS CONFIGURATION ====================
 const allowedOrigins = [
+  'https://sbtc.ac.ke',
   'https://serian-institute-live.vercel.app',
   'https://serian-institute.vercel.app',
   'http://localhost:3000',
@@ -100,6 +103,7 @@ app.get('/api/debug', async (req, res) => {
 // ==================== EXISTING ROUTES ====================
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
+app.use('/api/instructors', instructorRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/enrollments', enrollmentRoutes);
 app.use('/api/attendance', attendanceRoutes);
@@ -109,22 +113,23 @@ app.use('/api/grades', gradeRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/events', eventRoutes);
 
 // ==================== NEW INCOME & EXPENSE ROUTES ====================
 
 // Income Management
-// app.use('/api/income-sources', incomeSourceRoutes);
-// app.use('/api/income', incomeTransactionRoutes);
+app.use('/api/income-sources', incomeSourceRoutes);
+app.use('/api/income', incomeTransactionRoutes);
 
-// // Director Management
-// app.use('/api/directors', directorRoutes);
+// Director Management
+app.use('/api/directors', directorRoutes);
 
-// // Expense Management
-// app.use('/api/expense-categories', expenseCategoryRoutes);
-// app.use('/api/expenses', expenseRoutes);
+// Expense Management
+app.use('/api/expense-categories', expenseCategoryRoutes);
+app.use('/api/expenses', expenseRoutes);
 
-// // Financial Reports
-// app.use('/api/financial', financialReportRoutes);
+// Financial Reports
+app.use('/api/financial', financialReportRoutes);
 
 // ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {

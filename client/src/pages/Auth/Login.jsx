@@ -1,8 +1,9 @@
-// src/pages/Auth/Login.jsx - Updated with Google Auth
+// src/pages/Auth/Login.jsx - WITH FOOTER TEXT
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuthStore } from "../../stores/authStore";
-import { useGoogleAuth } from "../../hooks/useGoogleAuth"; // Import the hook
+import { useGoogleAuth } from "../../hooks/useGoogleAuth";
+import { Mail, Lock, Eye, EyeOff, LogIn } from "lucide-react";
 import toast from "react-hot-toast";
 
 const Login = () => {
@@ -13,10 +14,14 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isFormValid, setIsFormValid] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   const { login } = useAuthStore();
-  const { signInWithGoogle, loading: googleLoading } = useGoogleAuth(); // Use the hook
+  const { signInWithGoogle, loading: googleLoading } = useGoogleAuth();
   const navigate = useNavigate();
+
+  // Serian Institute Logo URL
+  const LOGO_URL = "https://serianinstitute.ac.ke/wp-content/uploads/2025/02/Picture2-removebg-preview.png";
 
   // Check form validity whenever formData changes
   useEffect(() => {
@@ -81,40 +86,57 @@ const Login = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="w-full max-w-xl bg-white rounded-2xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl">
-        {/* Serian Institute Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 h-2 w-full transition-all duration-500 hover:h-3"></div>
+  const handleLogoError = () => {
+    setLogoError(true);
+  };
 
-        <div className="px-10 py-10">
-          <div className="text-center mb-8">
-            <div className="mx-auto h-20 w-20 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center mb-4">
-              <span className="text-white font-bold text-xl">SI</span>
+  return (
+    <div className="min-h-screen flex items-center justify-center p-3 bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="w-full max-w-sm bg-white rounded-lg shadow-md overflow-hidden">
+        {/* Top bar */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 h-1 w-full"></div>
+
+        <div className="px-5 py-5">
+          {/* Logo and Title - With Serian Institute Logo */}
+          <div className="text-center mb-4">
+            {/* Logo Image with Fallback */}
+            <div className="mx-auto mb-3">
+              {!logoError ? (
+                <img
+                  src={LOGO_URL}
+                  alt="Serian Institute Logo"
+                  className="h-16 w-auto mx-auto object-contain"
+                  onError={handleLogoError}
+                />
+              ) : (
+                /* Fallback to text logo if image fails to load */
+                <div className="mx-auto h-10 w-10 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">SI</span>
+                </div>
+              )}
             </div>
-            <h1 className="text-3xl font-bold text-gray-800 transition-all duration-300 hover:text-blue-600">
-              Welcome to Serian Institute
+            <h1 className="text-lg font-bold text-gray-800">
+              Welcome Back
             </h1>
-            <p className="text-gray-500 mt-2 transition-all duration-300 hover:text-gray-700">
-              Sign in to your account to continue
+            <p className="text-xs text-gray-500 mt-0.5">
+              Sign in to continue
             </p>
           </div>
 
           {/* Google Sign In Button */}
           <button
-            className="flex items-center justify-center gap-3 w-full py-3.5 mb-6 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 w-full py-2 mb-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={handleGoogleSignIn}
             disabled={googleLoading || isSubmitting}
           >
             {googleLoading ? (
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-blue-600"></div>
             ) : (
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
-                className="transition-transform duration-300 hover:scale-110"
               >
                 <path
                   fill="#4285F4"
@@ -134,44 +156,33 @@ const Login = () => {
                 />
               </svg>
             )}
-            <span className="text-gray-700 font-medium transition-all duration-300 hover:text-blue-600">
-              {googleLoading ? "Signing in with Google..." : "Sign in with Google"}
+            <span className="text-gray-700 text-xs font-medium">
+              {googleLoading ? "Signing in..." : "Login with Google"}
             </span>
           </button>
 
-          <div className="relative flex items-center justify-center mb-6">
-            <div className="border-t border-gray-200 w-full transition-all duration-300 hover:border-gray-300"></div>
-            <span className="bg-white px-3 text-gray-500 text-sm transition-all duration-300 hover:text-blue-600 hover:scale-110">
+          {/* Divider */}
+          <div className="relative flex items-center justify-center mb-4">
+            <div className="border-t border-gray-200 w-full"></div>
+            <span className="bg-white px-2 text-gray-400 text-xs">
               OR
             </span>
-            <div className="border-t border-gray-200 w-full transition-all duration-300 hover:border-gray-300"></div>
+            <div className="border-t border-gray-200 w-full"></div>
           </div>
 
-          {/* Rest of the form remains the same */}
-          <form onSubmit={onFinish} className="space-y-6">
+          {/* Login Form */}
+          <form onSubmit={onFinish} className="space-y-3">
             {/* Email Field */}
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-xs font-medium text-gray-700 mb-1"
               >
-                Email Address
+                Email
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg
-                    className="h-5 w-5 text-gray-400 transition-all duration-300 hover:text-blue-600 hover:scale-110"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                    />
-                  </svg>
+                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                  <Mail className="h-3.5 w-3.5 text-gray-400" />
                 </div>
                 <input
                   id="email"
@@ -180,8 +191,8 @@ const Login = () => {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 hover:border-blue-400"
-                  placeholder="Enter your email"
+                  className="block w-full pl-8 pr-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="your@email.com"
                 />
               </div>
             </div>
@@ -190,25 +201,13 @@ const Login = () => {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-xs font-medium text-gray-700 mb-1"
               >
                 Password
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg
-                    className="h-5 w-5 text-gray-400 transition-all duration-300 hover:text-blue-600 hover:scale-110"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                    />
-                  </svg>
+                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                  <Lock className="h-3.5 w-3.5 text-gray-400" />
                 </div>
                 <input
                   id="password"
@@ -217,55 +216,25 @@ const Login = () => {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 hover:border-blue-400"
-                  placeholder="Enter your password"
+                  className="block w-full pl-8 pr-8 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="••••••"
                   minLength={6}
                 />
                 <button
                   type="button"
                   onClick={togglePasswordVisibility}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-blue-600 transition-all duration-300 hover:scale-110"
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600"
                 >
                   {showPassword ? (
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-                      />
-                    </svg>
+                    <EyeOff className="h-3.5 w-3.5" />
                   ) : (
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                      />
-                    </svg>
+                    <Eye className="h-3.5 w-3.5" />
                   )}
                 </button>
               </div>
               {formData.password && formData.password.length < 6 && (
-                <p className="mt-1 text-sm text-red-600">
-                  Password must be at least 6 characters
+                <p className="mt-1 text-xs text-red-600">
+                  Min. 6 characters
                 </p>
               )}
             </div>
@@ -274,9 +243,9 @@ const Login = () => {
             <div className="text-right">
               <Link
                 to="/forgot-password"
-                className="text-blue-600 text-sm font-medium hover:underline transition-all duration-300"
+                className="text-blue-600 text-xs hover:underline"
               >
-                Forgot Password?
+                Forgot password?
               </Link>
             </div>
 
@@ -284,51 +253,39 @@ const Login = () => {
             <button
               type="submit"
               disabled={!isFormValid || isSubmitting || googleLoading}
-              className="w-full h-12 rounded-xl text-lg font-semibold flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white transition-all duration-300 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              className="w-full h-8 rounded-md text-sm font-medium flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
                   Signing in...
                 </>
               ) : (
                 <>
-                  <svg
-                    className="h-5 w-5 transition-transform duration-300 group-hover:scale-110"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
-                    />
-                  </svg>
-                  Login
+                  <LogIn className="h-3.5 w-3.5" />
+                  Sign In
                 </>
               )}
             </button>
 
             {/* Register Link */}
-            <div className="mt-6 text-center">
-              <span className="text-gray-500 transition-all duration-300 hover:text-gray-700">
-                Don't have an account?{" "}
+            <div className="text-center pt-1">
+              <span className="text-xs text-gray-500">
+                New here?{" "}
                 <Link
                   to="/register"
-                  className="text-blue-600 font-semibold hover:underline transition-all duration-300 hover:text-blue-700"
+                  className="text-blue-600 font-medium hover:underline"
                 >
-                  Register
+                  Create account
                 </Link>
               </span>
             </div>
           </form>
         </div>
 
-        {/* Footer */}
-        <div className="bg-gray-50 py-4 px-8 text-center transition-all duration-300 hover:bg-gray-100">
-          <p className="text-xs text-gray-500 transition-all duration-300 hover:text-gray-700">
+        {/* Footer - Copyright */}
+        <div className="border-t border-gray-100 px-5 py-3">
+          <p className="text-center text-xs text-gray-400">
             © 2026 Serian Institute. All rights reserved.
           </p>
         </div>

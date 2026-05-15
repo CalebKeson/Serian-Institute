@@ -1,12 +1,34 @@
-// controllers/attendanceController.js
+// controllers/attendance.controller.js
 import Attendance from '../models/attendance.model.js';
 import Course from '../models/course.model.js';
 import Student from '../models/student.model.js';
 import Enrollment from '../models/enrollment.model.js';
 import { errorHandler } from '../utils/error.js';
+import NotificationService from '../services/notificationService.js';
+
+// Helper function to get consecutive absence count
+async function getConsecutiveAbsenceCount(studentId, courseId) {
+  const query = { student: studentId, status: 'absent' };
+  if (courseId) query.course = courseId;
+
+  const records = await Attendance.find(query)
+    .sort({ date: -1 })
+    .limit(10);
+
+  let count = 0;
+  for (const record of records) {
+    if (record.status === 'absent') {
+      count++;
+    } else {
+      break;
+    }
+  }
+  return count;
+}
 
 // @desc    Mark attendance for a student
 // @route   POST /api/attendance
+// @access  Private (Instructor/Admin)
 export const markAttendance = async (req, res, next) => {
   try {
     const { studentId, courseId, date, session, status, checkInTime, notes, excusedReason } = req.body;
@@ -18,13 +40,17 @@ export const markAttendance = async (req, res, next) => {
     }
 
     // Check if student exists
-    const student = await Student.findById(studentId);
+    const student = await Student.findById(studentId)
+      .populate('user', 'name email');
+    
     if (!student) {
       return next(errorHandler(404, 'Student not found'));
     }
 
     // Check if course exists
-    const course = await Course.findById(courseId);
+    const course = await Course.findById(courseId)
+      .populate('instructor', 'name email');
+    
     if (!course) {
       return next(errorHandler(404, 'Course not found'));
     }
@@ -46,7 +72,7 @@ export const markAttendance = async (req, res, next) => {
       return next(errorHandler(400, 'Invalid date format'));
     }
 
-    // Check if attendance already exists for this student/course/date/session
+    // Check if attendance already exists
     const existingAttendance = await Attendance.attendanceExists(studentId, courseId, attendanceDate, session);
     if (existingAttendance) {
       return next(errorHandler(400, 'Attendance already marked for this student on this date and session'));
@@ -75,11 +101,85 @@ export const markAttendance = async (req, res, next) => {
       markedBy
     });
 
-    // Populate and return the attendance record
+    // Populate and return
     const populatedAttendance = await Attendance.findById(attendance._id)
       .populate('student', 'studentId user')
       .populate('course', 'courseCode name')
       .populate('markedBy', 'name email');
+
+    // ============= NOTIFICATIONS =============
+    try {
+      const studentName = student.user?.name || 'Student';
+      const courseName = course.name;
+      const attendanceDateStr = attendanceDate.toLocaleDateString();
+      
+      let statusMessage = '';
+      let statusEmoji = '';
+
+      switch (status) {
+        case 'present':
+          statusMessage = 'present';
+          statusEmoji = '✅';
+          break;
+        case 'absent':
+          statusMessage = 'absent';
+          statusEmoji = '❌';
+          break;
+        case 'late':
+          statusMessage = 'late';
+          statusEmoji = '⚠️';
+          break;
+        case 'excused':
+          statusMessage = 'excused';
+          statusEmoji = '📝';
+          break;
+      }
+
+      // Notify the student
+      if (student.user) {
+        await NotificationService.createNotification({
+          recipientId: student.user._id,
+          title: status === 'present' ? '✅ Attendance Recorded' : 
+                  status === 'absent' ? '❌ Absence Recorded' :
+                  status === 'late' ? '⚠️ Late Arrival Recorded' : '📝 Excused Absence',
+          message: `${statusEmoji} Your attendance for ${courseName} on ${attendanceDateStr} has been marked as ${statusMessage}.`,
+          type: 'attendance',
+          actionUrl: `/attendance`
+        });
+      }
+
+      // Notify the course instructor
+      if (course.instructor && course.instructor._id.toString() !== req.user.id) {
+        await NotificationService.createNotification({
+          recipientId: course.instructor._id,
+          title: '📋 Attendance Marked',
+          message: `${studentName} was marked ${statusMessage} for ${courseName} on ${attendanceDateStr}.`,
+          type: 'attendance',
+          actionUrl: `/courses/${courseId}/attendance`
+        });
+      }
+
+      // Alert for consecutive absences
+      if (status === 'absent') {
+        const recentAbsences = await Attendance.find({
+          student: studentId,
+          course: courseId,
+          status: 'absent',
+          date: { $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000) }
+        }).sort({ date: -1 });
+
+        if (recentAbsences.length >= 3) {
+          await NotificationService.createForRole('admin', {
+            title: '⚠️ Consecutive Absences Alert',
+            message: `${studentName} has been absent ${recentAbsences.length} times in the past 14 days for ${courseName}.`,
+            type: 'alert',
+            actionUrl: `/students/${studentId}/attendance`
+          });
+        }
+      }
+    } catch (notificationError) {
+      console.error('Failed to send attendance notifications:', notificationError);
+    }
 
     res.status(201).json({
       success: true,
@@ -89,7 +189,7 @@ export const markAttendance = async (req, res, next) => {
 
   } catch (error) {
     if (error.code === 11000) {
-      return next(errorHandler(400, 'Attendance already exists for this student on this date and session'));
+      return next(errorHandler(400, 'Attendance already exists'));
     }
     next(errorHandler(400, error.message));
   }
@@ -97,52 +197,44 @@ export const markAttendance = async (req, res, next) => {
 
 // @desc    Bulk mark attendance for multiple students
 // @route   POST /api/attendance/bulk
+// @access  Private (Instructor/Admin)
 export const bulkMarkAttendance = async (req, res, next) => {
   try {
     const { courseId, date, session, attendanceData } = req.body;
     const markedBy = req.user.id;
 
-    // Validate required fields
     if (!courseId || !date || !session || !attendanceData || !Array.isArray(attendanceData)) {
       return next(errorHandler(400, 'Course, date, session, and attendance data are required'));
     }
 
-    // Check if course exists
-    const course = await Course.findById(courseId);
+    const course = await Course.findById(courseId).populate('instructor', 'name email');
     if (!course) {
       return next(errorHandler(404, 'Course not found'));
     }
 
-    // Parse and validate date
     const attendanceDate = new Date(date);
     if (isNaN(attendanceDate.getTime())) {
       return next(errorHandler(400, 'Invalid date format'));
     }
 
-    const results = {
-      successful: [],
-      errors: []
-    };
+    const results = { successful: [], errors: [] };
+    const notifiedStudents = new Set();
 
-    // Process each attendance record
     for (const record of attendanceData) {
       try {
         const { studentId, status, checkInTime, notes, excusedReason } = record;
 
-        // Validate required fields for each record
         if (!studentId || !status) {
-          results.errors.push(`Missing studentId or status for record: ${JSON.stringify(record)}`);
+          results.errors.push(`Missing studentId or status for record`);
           continue;
         }
 
-        // Check if student exists
-        const student = await Student.findById(studentId);
+        const student = await Student.findById(studentId).populate('user', 'name email');
         if (!student) {
           results.errors.push(`Student not found: ${studentId}`);
           continue;
         }
 
-        // Check if student is enrolled in the course
         const isEnrolled = await Enrollment.findOne({
           student: studentId,
           course: courseId,
@@ -150,42 +242,28 @@ export const bulkMarkAttendance = async (req, res, next) => {
         });
 
         if (!isEnrolled) {
-          results.errors.push(`Student ${student.user.name} is not enrolled in this course`);
+          results.errors.push(`Student ${student.user?.name || studentId} is not enrolled`);
           continue;
         }
 
-        // Check if attendance already exists
         const existingAttendance = await Attendance.attendanceExists(studentId, courseId, attendanceDate, session);
+        
+        let attendanceRecord;
         if (existingAttendance) {
-          // Update existing record instead of creating new one
-          const updatedAttendance = await Attendance.findOneAndUpdate(
+          attendanceRecord = await Attendance.findOneAndUpdate(
             {
               student: studentId,
               course: courseId,
-              date: {
-                $gte: new Date(attendanceDate.setHours(0, 0, 0, 0)),
-                $lt: new Date(attendanceDate.setHours(23, 59, 59, 999))
-              },
+              date: { $gte: new Date(attendanceDate.setHours(0, 0, 0, 0)), $lt: new Date(attendanceDate.setHours(23, 59, 59, 999)) },
               session: session
             },
-            {
-              status,
-              checkInTime: status === 'late' ? checkInTime : undefined,
-              notes,
-              excusedReason: status === 'excused' ? excusedReason : undefined,
-              markedBy,
-              markedAt: new Date()
-            },
+            { status, checkInTime: status === 'late' ? checkInTime : undefined, notes, excusedReason: status === 'excused' ? excusedReason : undefined, markedBy, markedAt: new Date() },
             { new: true, runValidators: true }
-          )
-            .populate('student', 'studentId user')
-            .populate('course', 'courseCode name')
-            .populate('markedBy', 'name email');
+          ).populate('student', 'studentId user').populate('course', 'courseCode name').populate('markedBy', 'name email');
 
-          results.successful.push(updatedAttendance);
+          results.successful.push(attendanceRecord);
         } else {
-          // Create new attendance record
-          const attendance = await Attendance.create({
+          attendanceRecord = await Attendance.create({
             student: studentId,
             course: courseId,
             date: attendanceDate,
@@ -197,7 +275,7 @@ export const bulkMarkAttendance = async (req, res, next) => {
             markedBy
           });
 
-          const populatedAttendance = await Attendance.findById(attendance._id)
+          const populatedAttendance = await Attendance.findById(attendanceRecord._id)
             .populate('student', 'studentId user')
             .populate('course', 'courseCode name')
             .populate('markedBy', 'name email');
@@ -205,8 +283,31 @@ export const bulkMarkAttendance = async (req, res, next) => {
           results.successful.push(populatedAttendance);
         }
 
+        if (!notifiedStudents.has(studentId) && student.user) {
+          notifiedStudents.add(studentId);
+          await NotificationService.createNotification({
+            recipientId: student.user._id,
+            title: '📋 Attendance Recorded',
+            message: `Your attendance for ${course.name} on ${attendanceDate.toLocaleDateString()} has been recorded as ${status}.`,
+            type: 'attendance',
+            actionUrl: `/attendance`
+          });
+        }
       } catch (error) {
-        results.errors.push(`Failed to process record for student ${record.studentId}: ${error.message}`);
+        results.errors.push(`Failed for student ${record.studentId}: ${error.message}`);
+      }
+    }
+
+    if (results.successful.length > 0) {
+      try {
+        await NotificationService.createForRole('admin', {
+          title: '📋 Bulk Attendance Marked',
+          message: `${results.successful.length} attendance records marked for ${course.name}. ${results.errors.length} failed.`,
+          type: 'attendance',
+          actionUrl: `/courses/${courseId}/attendance`
+        });
+      } catch (notificationError) {
+        console.error('Failed to send bulk attendance notification:', notificationError);
       }
     }
 
@@ -221,7 +322,7 @@ export const bulkMarkAttendance = async (req, res, next) => {
           failed: results.errors.length
         }
       },
-      message: `Successfully processed ${results.successful.length} attendance records`
+      message: `Processed ${results.successful.length} attendance records`
     });
 
   } catch (error) {
@@ -231,6 +332,7 @@ export const bulkMarkAttendance = async (req, res, next) => {
 
 // @desc    Get attendance for a course on a specific date
 // @route   GET /api/attendance/course/:id
+// @access  Private (Instructor/Admin)
 export const getCourseAttendance = async (req, res, next) => {
   try {
     const { id: courseId } = req.params;
@@ -240,13 +342,11 @@ export const getCourseAttendance = async (req, res, next) => {
       return next(errorHandler(400, 'Date is required'));
     }
 
-    // Parse date
     const attendanceDate = new Date(date);
     if (isNaN(attendanceDate.getTime())) {
       return next(errorHandler(400, 'Invalid date format'));
     }
 
-    // Check if course exists
     const course = await Course.findById(courseId);
     if (!course) {
       return next(errorHandler(404, 'Course not found'));
@@ -254,25 +354,18 @@ export const getCourseAttendance = async (req, res, next) => {
 
     const attendance = await Attendance.getCourseAttendance(courseId, attendanceDate, session);
 
-    // If no attendance records exist, return enrolled students with default status
     if (attendance.length === 0) {
       const enrolledStudents = await Enrollment.find({
         course: courseId,
         status: 'enrolled'
       }).populate({
         path: 'student',
-        populate: {
-          path: 'user',
-          select: 'name email'
-        }
+        populate: { path: 'user', select: 'name email' }
       });
 
       const studentsWithDefaultAttendance = enrolledStudents.map(enrollment => ({
         _id: null,
-        student: {
-          ...enrollment.student.toObject(),
-          phone: enrollment.student.phone // Make sure phone is included
-        },
+        student: enrollment.student,
         course: courseId,
         date: attendanceDate,
         session: session || 'full-day',
@@ -281,15 +374,13 @@ export const getCourseAttendance = async (req, res, next) => {
         notes: '',
         isExcused: false,
         markedBy: null,
-        markedAt: null,
-        createdAt: null,
-        updatedAt: null
+        markedAt: null
       }));
 
       return res.json({
         success: true,
         data: studentsWithDefaultAttendance,
-        message: 'No attendance records found for this date. Showing enrolled students with default status.'
+        message: 'No attendance records found. Showing enrolled students with default status.'
       });
     }
 
@@ -303,14 +394,15 @@ export const getCourseAttendance = async (req, res, next) => {
     next(errorHandler(500, error.message));
   }
 };
+
 // @desc    Get attendance history for a student
 // @route   GET /api/attendance/student/:id
+// @access  Private
 export const getStudentAttendance = async (req, res, next) => {
   try {
     const { id: studentId } = req.params;
     const { startDate, endDate, courseId, page = 1, limit = 20 } = req.query;
 
-    // Validate date range
     if (!startDate || !endDate) {
       return next(errorHandler(400, 'Start date and end date are required'));
     }
@@ -326,7 +418,6 @@ export const getStudentAttendance = async (req, res, next) => {
       return next(errorHandler(400, 'Start date cannot be after end date'));
     }
 
-    // Check if student exists
     const student = await Student.findById(studentId);
     if (!student) {
       return next(errorHandler(404, 'Student not found'));
@@ -336,10 +427,7 @@ export const getStudentAttendance = async (req, res, next) => {
       student: studentId,
       date: { $gte: start, $lte: end }
     };
-
-    if (courseId) {
-      query.course = courseId;
-    }
+    if (courseId) query.course = courseId;
 
     const attendance = await Attendance.find(query)
       .populate('course', 'courseCode name instructor')
@@ -368,13 +456,27 @@ export const getStudentAttendance = async (req, res, next) => {
 
 // @desc    Update attendance record
 // @route   PUT /api/attendance/:id
+// @access  Private (Instructor/Admin)
 export const updateAttendance = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status, checkInTime, notes, excusedReason } = req.body;
     const updatedBy = req.user.id;
 
-    const attendance = await Attendance.findByIdAndUpdate(
+    const attendance = await Attendance.findById(id)
+      .populate('student', 'studentId user')
+      .populate('course', 'courseCode name');
+    
+    if (!attendance) {
+      return next(errorHandler(404, 'Attendance record not found'));
+    }
+
+    const oldStatus = attendance.status;
+    const studentName = attendance.student?.user?.name || 'Student';
+    const courseName = attendance.course?.name || 'Course';
+    const attendanceDate = attendance.date.toLocaleDateString();
+
+    const updatedAttendance = await Attendance.findByIdAndUpdate(
       id,
       {
         status,
@@ -390,19 +492,29 @@ export const updateAttendance = async (req, res, next) => {
       .populate('course', 'courseCode name')
       .populate('markedBy', 'name email');
 
-    if (!attendance) {
-      return next(errorHandler(404, 'Attendance record not found'));
+    if (status !== oldStatus && attendance.student?.user) {
+      try {
+        await NotificationService.createNotification({
+          recipientId: attendance.student.user._id,
+          title: '📋 Attendance Updated',
+          message: `Your attendance for ${courseName} on ${attendanceDate} has been updated from ${oldStatus} to ${status}.`,
+          type: 'attendance',
+          actionUrl: `/attendance`
+        });
+      } catch (notificationError) {
+        console.error('Failed to send attendance update notification:', notificationError);
+      }
     }
 
     res.json({
       success: true,
-      data: attendance,
+      data: updatedAttendance,
       message: 'Attendance updated successfully'
     });
 
   } catch (error) {
     if (error.code === 11000) {
-      return next(errorHandler(400, 'Attendance record already exists for this student on this date and session'));
+      return next(errorHandler(400, 'Duplicate attendance record'));
     }
     next(errorHandler(400, error.message));
   }
@@ -426,15 +538,12 @@ export const getAttendanceStats = async (req, res, next) => {
     let stats;
 
     if (courseId) {
-      // Course-specific statistics
       const course = await Course.findById(courseId);
       if (!course) {
         return next(errorHandler(404, 'Course not found'));
       }
-
       stats = await Attendance.getAttendanceStats(courseId, start, end);
     } else if (studentId) {
-      // Student-specific statistics
       const student = await Student.findById(studentId);
       if (!student) {
         return next(errorHandler(404, 'Student not found'));
@@ -459,31 +568,27 @@ export const getAttendanceStats = async (req, res, next) => {
         excused,
         attendanceRate: total > 0 ? ((present + excused) / total) * 100 : 0
       }];
+
+      const attendanceRate = total > 0 ? ((present + excused) / total) * 100 : 0;
+      if (attendanceRate < 75 && total > 5 && req.user.role !== 'student' && student.user) {
+        try {
+          await NotificationService.createNotification({
+            recipientId: student.user._id,
+            title: '⚠️ Low Attendance Alert',
+            message: `Your attendance rate is ${attendanceRate.toFixed(1)}%. Please attend all classes regularly.`,
+            type: 'alert',
+            actionUrl: `/attendance`
+          });
+        } catch (notificationError) {
+          console.error('Failed to send low attendance alert:', notificationError);
+        }
+      }
     } else {
-      // Global statistics for dashboard
-      const totalRecords = await Attendance.countDocuments({
-        date: { $gte: start, $lte: end }
-      });
-      
-      const present = await Attendance.countDocuments({
-        date: { $gte: start, $lte: end },
-        status: 'present'
-      });
-      
-      const absent = await Attendance.countDocuments({
-        date: { $gte: start, $lte: end },
-        status: 'absent'
-      });
-      
-      const late = await Attendance.countDocuments({
-        date: { $gte: start, $lte: end },
-        status: 'late'
-      });
-      
-      const excused = await Attendance.countDocuments({
-        date: { $gte: start, $lte: end },
-        status: 'excused'
-      });
+      const totalRecords = await Attendance.countDocuments({ date: { $gte: start, $lte: end } });
+      const present = await Attendance.countDocuments({ date: { $gte: start, $lte: end }, status: 'present' });
+      const absent = await Attendance.countDocuments({ date: { $gte: start, $lte: end }, status: 'absent' });
+      const late = await Attendance.countDocuments({ date: { $gte: start, $lte: end }, status: 'late' });
+      const excused = await Attendance.countDocuments({ date: { $gte: start, $lte: end }, status: 'excused' });
 
       stats = [{
         total: totalRecords,
@@ -497,14 +602,7 @@ export const getAttendanceStats = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: stats[0] || {
-        total: 0,
-        present: 0,
-        absent: 0,
-        late: 0,
-        excused: 0,
-        attendanceRate: 0
-      }
+      data: stats[0] || { total: 0, present: 0, absent: 0, late: 0, excused: 0, attendanceRate: 0 }
     });
 
   } catch (error) {
@@ -514,6 +612,7 @@ export const getAttendanceStats = async (req, res, next) => {
 
 // @desc    Get attendance calendar for a student
 // @route   GET /api/attendance/calendar/:studentId
+// @access  Private
 export const getAttendanceCalendar = async (req, res, next) => {
   try {
     const { studentId } = req.params;
@@ -523,7 +622,6 @@ export const getAttendanceCalendar = async (req, res, next) => {
       return next(errorHandler(400, 'Year and month are required'));
     }
 
-    // Check if student exists
     const student = await Student.findById(studentId);
     if (!student) {
       return next(errorHandler(404, 'Student not found'));
@@ -536,34 +634,25 @@ export const getAttendanceCalendar = async (req, res, next) => {
       student: studentId,
       date: { $gte: startDate, $lte: endDate }
     };
-
-    if (courseId) {
-      query.course = courseId;
-    }
+    if (courseId) query.course = courseId;
 
     const attendance = await Attendance.find(query)
       .select('date status course session')
       .populate('course', 'courseCode name color')
       .sort({ date: 1 });
 
-    // Format data for calendar
     const calendarData = attendance.map(record => ({
       date: record.date.toISOString().split('T')[0],
       status: record.status,
-      course: record.course.courseCode,
-      courseName: record.course.name,
+      course: record.course?.courseCode,
+      courseName: record.course?.name,
       session: record.session
     }));
 
     res.json({
       success: true,
       data: calendarData,
-      period: {
-        startDate,
-        endDate,
-        year: parseInt(year),
-        month: parseInt(month)
-      }
+      period: { startDate, endDate, year: parseInt(year), month: parseInt(month) }
     });
 
   } catch (error) {
@@ -573,130 +662,86 @@ export const getAttendanceCalendar = async (req, res, next) => {
 
 // @desc    Get student attendance summary
 // @route   GET /api/attendance/student/:studentId/summary
+// @access  Private
 export const getStudentSummary = async (req, res, next) => {
   try {
     const { studentId } = req.params;
     const { courseId, startDate, endDate } = req.query;
 
-    // Build query
-    const query = { student: studentId };
-    
-    if (courseId) {
-      query.course = courseId;
-    }
-    
-    if (startDate && endDate) {
-      query.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
+    if (req.user.role === 'student') {
+      const student = await Student.findOne({ user: req.user._id });
+      if (!student || student._id.toString() !== studentId) {
+        return next(errorHandler(403, 'Access denied'));
+      }
     }
 
-    // Get all attendance records
+    const query = { student: studentId };
+    if (courseId) query.course = courseId;
+    if (startDate && endDate) {
+      query.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    }
+
     const records = await Attendance.find(query)
       .populate('course', 'name courseCode')
       .sort({ date: 1 });
 
-    // Calculate statistics
     const totalDays = records.length;
     const present = records.filter(r => r.status === 'present').length;
     const absent = records.filter(r => r.status === 'absent').length;
     const late = records.filter(r => r.status === 'late').length;
     const excused = records.filter(r => r.status === 'excused').length;
-    
-    const attendanceRate = totalDays > 0 
-      ? ((present + excused) / totalDays) * 100 
-      : 0;
+    const attendanceRate = totalDays > 0 ? ((present + excused) / totalDays) * 100 : 0;
 
     // Calculate streaks
-    let currentStreak = 0;
-    let longestStreak = 0;
-    let tempStreak = 0;
-
+    let currentStreak = 0, longestStreak = 0, tempStreak = 0;
     records.forEach((record, index) => {
       if (record.status === 'present' || record.status === 'excused') {
         tempStreak++;
         longestStreak = Math.max(longestStreak, tempStreak);
-        
-        // Check if this is the most recent record for current streak
-        if (index === records.length - 1) {
-          currentStreak = tempStreak;
-        }
+        if (index === records.length - 1) currentStreak = tempStreak;
       } else {
         tempStreak = 0;
       }
     });
 
-    // Find best and worst days
+    // Day stats
     const dayStats = {};
     records.forEach(record => {
       const day = new Date(record.date).toLocaleDateString('en-US', { weekday: 'long' });
-      if (!dayStats[day]) {
-        dayStats[day] = { total: 0, present: 0 };
-      }
+      if (!dayStats[day]) dayStats[day] = { total: 0, present: 0 };
       dayStats[day].total++;
-      if (record.status === 'present' || record.status === 'excused') {
-        dayStats[day].present++;
-      }
+      if (record.status === 'present' || record.status === 'excused') dayStats[day].present++;
     });
 
-    let bestDay = 'N/A';
-    let worstDay = 'N/A';
-    let bestRate = 0;
-    let worstRate = 100;
-
+    let bestDay = 'N/A', worstDay = 'N/A', bestRate = 0, worstRate = 100;
     Object.entries(dayStats).forEach(([day, stats]) => {
       const rate = (stats.present / stats.total) * 100;
-      if (rate > bestRate) {
-        bestRate = rate;
-        bestDay = day;
-      }
-      if (rate < worstRate) {
-        worstRate = rate;
-        worstDay = day;
-      }
+      if (rate > bestRate) { bestRate = rate; bestDay = day; }
+      if (rate < worstRate) { worstRate = rate; worstDay = day; }
     });
 
-    // Get most common status
     const statusCounts = { present, absent, late, excused };
-    const mostCommon = Object.keys(statusCounts).reduce((a, b) => 
-      statusCounts[a] > statusCounts[b] ? a : b
-    );
+    const mostCommon = Object.keys(statusCounts).reduce((a, b) => statusCounts[a] > statusCounts[b] ? a : b);
 
-    // Calculate this week's attendance
+    // This week's attendance
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
     startOfWeek.setHours(0, 0, 0, 0);
-    
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
-
-    const thisWeekRecords = records.filter(r => 
-      r.date >= startOfWeek && r.date <= endOfWeek
-    );
-    
-    const thisWeekPresent = thisWeekRecords.filter(r => 
-      r.status === 'present' || r.status === 'excused'
-    ).length;
+    const thisWeekRecords = records.filter(r => r.date >= startOfWeek && r.date <= endOfWeek);
+    const thisWeekPresent = thisWeekRecords.filter(r => r.status === 'present' || r.status === 'excused').length;
 
     res.json({
       success: true,
       data: {
         totalDays,
-        totalRecords: totalDays,
-        present,
-        absent,
-        late,
-        excused,
+        present, absent, late, excused,
         attendanceRate: Math.round(attendanceRate * 10) / 10,
         consecutiveAbsences: await getConsecutiveAbsenceCount(studentId, courseId),
-        currentStreak,
-        longestStreak,
-        bestDay,
-        worstDay,
-        mostCommon,
+        currentStreak, longestStreak, bestDay, worstDay, mostCommon,
         thisWeek: thisWeekPresent
       }
     });
@@ -708,6 +753,7 @@ export const getStudentSummary = async (req, res, next) => {
 
 // @desc    Get student calendar data
 // @route   GET /api/attendance/student/:studentId/calendar
+// @access  Private
 export const getStudentCalendar = async (req, res, next) => {
   try {
     const { studentId } = req.params;
@@ -716,14 +762,8 @@ export const getStudentCalendar = async (req, res, next) => {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);
 
-    const query = {
-      student: studentId,
-      date: { $gte: startDate, $lte: endDate }
-    };
-
-    if (courseId) {
-      query.course = courseId;
-    }
+    const query = { student: studentId, date: { $gte: startDate, $lte: endDate } };
+    if (courseId) query.course = courseId;
 
     const records = await Attendance.find(query)
       .populate('course', 'name')
@@ -737,10 +777,7 @@ export const getStudentCalendar = async (req, res, next) => {
       courseName: record.course?.name
     }));
 
-    res.json({
-      success: true,
-      data: calendarData
-    });
+    res.json({ success: true, data: calendarData });
 
   } catch (error) {
     next(errorHandler(500, error.message));
@@ -749,86 +786,42 @@ export const getStudentCalendar = async (req, res, next) => {
 
 // @desc    Get student course breakdown
 // @route   GET /api/attendance/student/:studentId/courses
+// @access  Private
 export const getStudentCourseBreakdown = async (req, res, next) => {
   try {
     const { studentId } = req.params;
     const { startDate, endDate } = req.query;
 
-    // Get all enrollments for the student
-    const enrollments = await Enrollment.find({ 
-      student: studentId,
-      status: 'enrolled'
-    }).populate('course');
-
+    const enrollments = await Enrollment.find({ student: studentId, status: 'enrolled' }).populate('course');
     const courseData = [];
 
     for (const enrollment of enrollments) {
       const course = enrollment.course;
-      
-      // Build date filter
       const dateFilter = {};
       if (startDate && endDate) {
-        dateFilter.date = {
-          $gte: new Date(startDate),
-          $lte: new Date(endDate)
-        };
+        dateFilter.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
       }
 
-      // Get attendance records for this course
-      const records = await Attendance.find({
-        student: studentId,
-        course: course._id,
-        ...dateFilter
-      }).sort({ date: -1 });
+      const records = await Attendance.find({ student: studentId, course: course._id, ...dateFilter }).sort({ date: -1 });
 
       const totalClasses = records.length;
       const present = records.filter(r => r.status === 'present').length;
       const absent = records.filter(r => r.status === 'absent').length;
       const late = records.filter(r => r.status === 'late').length;
       const excused = records.filter(r => r.status === 'excused').length;
-      
-      const attendanceRate = totalClasses > 0 
-        ? Math.round(((present + excused) / totalClasses) * 100) 
-        : 0;
-
-      // Calculate trend (compare with previous period)
-      let trend = 0;
-      if (records.length >= 10) {
-        const midPoint = Math.floor(records.length / 2);
-        const firstHalf = records.slice(0, midPoint);
-        const secondHalf = records.slice(midPoint);
-        
-        const firstHalfRate = firstHalf.filter(r => r.status === 'present' || r.status === 'excused').length / firstHalf.length * 100;
-        const secondHalfRate = secondHalf.filter(r => r.status === 'present' || r.status === 'excused').length / secondHalf.length * 100;
-        
-        trend = Math.round(secondHalfRate - firstHalfRate);
-      }
+      const attendanceRate = totalClasses > 0 ? Math.round(((present + excused) / totalClasses) * 100) : 0;
 
       courseData.push({
         courseId: course._id,
         courseCode: course.courseCode,
         courseName: course.name,
         instructor: course.instructor?.name || 'Unknown',
-        totalClasses,
-        present,
-        absent,
-        late,
-        excused,
-        attendanceRate,
-        trend,
-        recentAttendance: records.slice(0, 5).map(r => ({
-          date: r.date,
-          status: r.status,
-          checkInTime: r.checkInTime,
-          notes: r.notes
-        }))
+        totalClasses, present, absent, late, excused, attendanceRate,
+        recentAttendance: records.slice(0, 5).map(r => ({ date: r.date, status: r.status, checkInTime: r.checkInTime, notes: r.notes }))
       });
     }
 
-    res.json({
-      success: true,
-      data: courseData
-    });
+    res.json({ success: true, data: courseData });
 
   } catch (error) {
     next(errorHandler(500, error.message));
@@ -837,6 +830,7 @@ export const getStudentCourseBreakdown = async (req, res, next) => {
 
 // @desc    Get consecutive absences
 // @route   GET /api/attendance/student/:studentId/absences/consecutive
+// @access  Private
 export const getConsecutiveAbsences = async (req, res, next) => {
   try {
     const { studentId } = req.params;
@@ -845,9 +839,7 @@ export const getConsecutiveAbsences = async (req, res, next) => {
     const query = { student: studentId };
     if (courseId) query.course = courseId;
 
-    const records = await Attendance.find(query)
-      .sort({ date: -1 })
-      .limit(30); // Check last 30 days
+    const records = await Attendance.find(query).sort({ date: -1 }).limit(30);
 
     let consecutiveCount = 0;
     const absenceDates = [];
@@ -857,17 +849,11 @@ export const getConsecutiveAbsences = async (req, res, next) => {
         consecutiveCount++;
         absenceDates.push(record.date);
       } else {
-        break; // Stop at first non-absent
+        break;
       }
     }
 
-    res.json({
-      success: true,
-      data: {
-        count: consecutiveCount,
-        dates: absenceDates
-      }
-    });
+    res.json({ success: true, data: { count: consecutiveCount, dates: absenceDates } });
 
   } catch (error) {
     next(errorHandler(500, error.message));
@@ -876,6 +862,7 @@ export const getConsecutiveAbsences = async (req, res, next) => {
 
 // @desc    Get student attendance trend
 // @route   GET /api/attendance/student/:studentId/trend
+// @access  Private
 export const getStudentTrend = async (req, res, next) => {
   try {
     const { studentId } = req.params;
@@ -883,19 +870,12 @@ export const getStudentTrend = async (req, res, next) => {
 
     const query = {
       student: studentId,
-      date: {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      }
+      date: { $gte: new Date(startDate), $lte: new Date(endDate) }
     };
-
-    if (courseId) {
-      query.course = courseId;
-    }
+    if (courseId) query.course = courseId;
 
     const records = await Attendance.find(query).sort({ date: 1 });
 
-    // Group by week for trend data
     const weeklyData = [];
     const weeklyMap = new Map();
 
@@ -904,19 +884,10 @@ export const getStudentTrend = async (req, res, next) => {
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay());
       const weekKey = weekStart.toISOString().split('T')[0];
-      
+
       if (!weeklyMap.has(weekKey)) {
-        weeklyMap.set(weekKey, {
-          week: `Week ${weeklyMap.size + 1}`,
-          date: weekKey,
-          present: 0,
-          absent: 0,
-          late: 0,
-          excused: 0,
-          total: 0
-        });
+        weeklyMap.set(weekKey, { week: `Week ${weeklyMap.size + 1}`, date: weekKey, present: 0, absent: 0, late: 0, excused: 0, total: 0 });
       }
-      
       const week = weeklyMap.get(weekKey);
       week[record.status]++;
       week.total++;
@@ -924,263 +895,68 @@ export const getStudentTrend = async (req, res, next) => {
 
     weeklyData.push(...weeklyMap.values());
 
-    res.json({
-      success: true,
-      data: weeklyData
-    });
+    res.json({ success: true, data: weeklyData });
 
   } catch (error) {
     next(errorHandler(500, error.message));
   }
 };
 
-// Helper function to get consecutive absence count
-async function getConsecutiveAbsenceCount(studentId, courseId) {
-  const query = { student: studentId };
-  if (courseId) query.course = courseId;
-
-  const records = await Attendance.find(query)
-    .sort({ date: -1 })
-    .limit(10);
-
-  let count = 0;
-  for (const record of records) {
-    if (record.status === 'absent') {
-      count++;
-    } else {
-      break;
-    }
-  }
-  return count;
-}
-
-// @desc    Get attendance report for date range
-// @route   GET /api/attendance/reports
-export const getAttendanceReport = async (req, res, next) => {
-  try {
-    const { courseId, studentId, startDate, endDate, status, groupBy } = req.query;
-    
-    if (!courseId && !studentId) {
-      return next(errorHandler(400, 'Either courseId or studentId is required'));
-    }
-    
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-    
-    // Build query
-    const query = {
-      date: { $gte: start, $lte: end }
-    };
-    
-    if (courseId) query.course = courseId;
-    if (studentId) query.student = studentId;
-    if (status) query.status = status;
-    
-    // Get all attendance records in date range
-    const records = await Attendance.find(query)
-      .populate('student', 'studentId user')
-      .populate('course', 'courseCode name')
-      .sort({ date: 1 });
-    
-    // Calculate summary statistics
-    const summary = {
-      totalDays: 0,
-      totalRecords: records.length,
-      present: records.filter(r => r.status === 'present').length,
-      absent: records.filter(r => r.status === 'absent').length,
-      late: records.filter(r => r.status === 'late').length,
-      excused: records.filter(r => r.status === 'excused').length,
-    };
-    
-    // Calculate unique days
-    const uniqueDays = new Set(records.map(r => r.date.toISOString().split('T')[0]));
-    summary.totalDays = uniqueDays.size;
-    
-    // Get enrolled count for attendance rate calculation
-    let enrolledCount = 0;
-    if (courseId) {
-      const course = await Course.findById(courseId);
-      enrolledCount = course?.enrolledStudents?.length || 0;
-    } else {
-      enrolledCount = 1; // For student reports
-    }
-    
-    const totalPossible = summary.totalDays * enrolledCount;
-    summary.attendanceRate = totalPossible > 0 
-      ? ((summary.present + summary.excused) / totalPossible) * 100 
-      : 0;
-    
-    summary.averageAttendance = summary.totalDays > 0 
-      ? (summary.present + summary.late) / summary.totalDays 
-      : 0;
-    
-    // Group data by day/week/month
-    let groupedData = [];
-    if (groupBy === 'week') {
-      // Group by week
-      const weekMap = new Map();
-      records.forEach(record => {
-        const date = new Date(record.date);
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - date.getDay());
-        const weekKey = weekStart.toISOString().split('T')[0];
-        
-        if (!weekMap.has(weekKey)) {
-          weekMap.set(weekKey, {
-            date: weekKey,
-            present: 0,
-            absent: 0,
-            late: 0,
-            excused: 0
-          });
-        }
-        
-        const week = weekMap.get(weekKey);
-        week[record.status]++;
-      });
-      groupedData = Array.from(weekMap.values());
-    } else if (groupBy === 'month') {
-      // Group by month
-      const monthMap = new Map();
-      records.forEach(record => {
-        const date = new Date(record.date);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        
-        if (!monthMap.has(monthKey)) {
-          monthMap.set(monthKey, {
-            date: monthKey,
-            present: 0,
-            absent: 0,
-            late: 0,
-            excused: 0
-          });
-        }
-        
-        const month = monthMap.get(monthKey);
-        month[record.status]++;
-      });
-      groupedData = Array.from(monthMap.values());
-    } else {
-      // Group by day (default)
-      groupedData = Array.from(uniqueDays).map(date => {
-        const dayRecords = records.filter(r => 
-          r.date.toISOString().split('T')[0] === date
-        );
-        return {
-          date,
-          present: dayRecords.filter(r => r.status === 'present').length,
-          absent: dayRecords.filter(r => r.status === 'absent').length,
-          late: dayRecords.filter(r => r.status === 'late').length,
-          excused: dayRecords.filter(r => r.status === 'excused').length,
-        };
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: groupedData,
-      summary
-    });
-    
-  } catch (error) {
-    next(errorHandler(500, error.message));
-  }
-};
-
-// ============= CHART DATA CONTROLLERS =============
-
-// @desc    Get daily trend data for course (IMPROVED ACCURACY)
+// @desc    Get daily trend data for course
 // @route   GET /api/attendance/course/:courseId/trend
+// @access  Private (Admin/Instructor)
 export const getDailyTrend = async (req, res, next) => {
   try {
     const { courseId } = req.params;
     const { startDate, endDate } = req.query;
 
-    if (!startDate || !endDate) {
-      return next(errorHandler(400, 'Start date and end date are required'));
-    }
-
     const start = new Date(startDate);
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
 
-    // Get course details including schedule
     const course = await Course.findById(courseId);
     if (!course) {
       return next(errorHandler(404, 'Course not found'));
     }
 
-    // Get all enrolled students (active enrollments only)
-    const activeEnrollments = await Enrollment.find({
-      course: courseId,
-      status: 'enrolled'
-    }).select('student');
-    
+    const activeEnrollments = await Enrollment.find({ course: courseId, status: 'enrolled' }).select('student');
     const enrolledStudentIds = activeEnrollments.map(e => e.student.toString());
 
-    // Get attendance records for the date range
-    const records = await Attendance.find({
-      course: courseId,
-      date: { $gte: start, $lte: end }
-    }).sort({ date: 1 });
+    const records = await Attendance.find({ course: courseId, date: { $gte: start, $lte: end } }).sort({ date: 1 });
 
-    // Create a map of dates to attendance records
     const attendanceByDate = new Map();
     records.forEach(record => {
       const dateStr = record.date.toISOString().split('T')[0];
-      if (!attendanceByDate.has(dateStr)) {
-        attendanceByDate.set(dateStr, []);
-      }
+      if (!attendanceByDate.has(dateStr)) attendanceByDate.set(dateStr, []);
       attendanceByDate.get(dateStr).push(record);
     });
 
-    // Generate daily data
     const dailyData = [];
     const currentDate = new Date(start);
-    
+
     while (currentDate <= end) {
       const dateStr = currentDate.toISOString().split('T')[0];
-      const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
-      
-      // Check if this is a class day based on course schedule
+      const dayOfWeek = currentDate.getDay();
+
       const isClassDay = course.schedule?.days?.some(day => {
-        const dayMap = {
-          'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3,
-          'Thursday': 4, 'Friday': 5, 'Saturday': 6
-        };
+        const dayMap = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
         return dayMap[day] === dayOfWeek;
       });
 
-      // Get attendance records for this date
       const dayRecords = attendanceByDate.get(dateStr) || [];
-      
-      // Count students who were marked present/late/excused
       const presentCount = dayRecords.filter(r => r.status === 'present').length;
       const lateCount = dayRecords.filter(r => r.status === 'late').length;
       const excusedCount = dayRecords.filter(r => r.status === 'excused').length;
       const absentCount = dayRecords.filter(r => r.status === 'absent').length;
-      
-      // Total students who should be present on this class day
       const expectedStudents = isClassDay ? enrolledStudentIds.length : 0;
-      
-      // Total students actually accounted for (attendance marked)
-      const markedCount = dayRecords.length;
-      
-      // Calculate percentages based on expected students (for class days)
+
       let presentPercent = 0, latePercent = 0, excusedPercent = 0, absentPercent = 0;
-      
+
       if (isClassDay && expectedStudents > 0) {
         presentPercent = Math.round((presentCount / expectedStudents) * 100);
         latePercent = Math.round((lateCount / expectedStudents) * 100);
         excusedPercent = Math.round((excusedCount / expectedStudents) * 100);
         absentPercent = Math.round((absentCount / expectedStudents) * 100);
-      } else if (!isClassDay) {
-        // For non-class days, show 0 or N/A
-        presentPercent = 0;
-        latePercent = 0;
-        excusedPercent = 0;
-        absentPercent = 0;
       }
 
       dailyData.push({
@@ -1190,19 +966,15 @@ export const getDailyTrend = async (req, res, next) => {
         absent: absentPercent,
         late: latePercent,
         excused: excusedPercent,
-        markedCount,
+        markedCount: dayRecords.length,
         expectedCount: expectedStudents,
         isClassDay
       });
 
-      // Move to next day
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    res.json({
-      success: true,
-      data: dailyData
-    });
+    res.json({ success: true, data: dailyData });
 
   } catch (error) {
     next(errorHandler(500, error.message));
@@ -1211,6 +983,7 @@ export const getDailyTrend = async (req, res, next) => {
 
 // @desc    Get status distribution for course
 // @route   GET /api/attendance/course/:courseId/distribution
+// @access  Private (Admin/Instructor)
 export const getStatusDistribution = async (req, res, next) => {
   try {
     const { courseId } = req.params;
@@ -1220,10 +993,7 @@ export const getStatusDistribution = async (req, res, next) => {
     const end = new Date(endDate || new Date());
     end.setHours(23, 59, 59, 999);
 
-    const records = await Attendance.find({
-      course: courseId,
-      date: { $gte: start, $lte: end }
-    });
+    const records = await Attendance.find({ course: courseId, date: { $gte: start, $lte: end } });
 
     const distribution = {
       present: records.filter(r => r.status === 'present').length,
@@ -1234,7 +1004,6 @@ export const getStatusDistribution = async (req, res, next) => {
 
     const total = Object.values(distribution).reduce((a, b) => a + b, 0);
 
-    // Format for pie chart
     const data = [
       { name: 'Present', value: distribution.present, color: '#10b981' },
       { name: 'Absent', value: distribution.absent, color: '#ef4444' },
@@ -1248,9 +1017,7 @@ export const getStatusDistribution = async (req, res, next) => {
       summary: {
         total,
         ...distribution,
-        attendanceRate: total > 0 
-          ? Math.round(((distribution.present + distribution.excused) / total) * 100) 
-          : 0
+        attendanceRate: total > 0 ? Math.round(((distribution.present + distribution.excused) / total) * 100) : 0
       }
     });
 
@@ -1259,8 +1026,9 @@ export const getStatusDistribution = async (req, res, next) => {
   }
 };
 
-// @desc    Get weekly comparison data (IMPROVED ACCURACY)
+// @desc    Get weekly comparison data
 // @route   GET /api/attendance/course/:courseId/weekly
+// @access  Private (Admin/Instructor)
 export const getWeeklyComparison = async (req, res, next) => {
   try {
     const { courseId } = req.params;
@@ -1270,27 +1038,16 @@ export const getWeeklyComparison = async (req, res, next) => {
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - (weeks * 7));
 
-    // Get course details
     const course = await Course.findById(courseId);
     if (!course) {
       return next(errorHandler(404, 'Course not found'));
     }
 
-    // Get active enrollments
-    const activeEnrollments = await Enrollment.find({
-      course: courseId,
-      status: 'enrolled'
-    }).select('student');
-    
+    const activeEnrollments = await Enrollment.find({ course: courseId, status: 'enrolled' }).select('student');
     const enrolledStudentIds = activeEnrollments.map(e => e.student.toString());
 
-    // Get attendance records
-    const records = await Attendance.find({
-      course: courseId,
-      date: { $gte: startDate, $lte: endDate }
-    }).sort({ date: 1 });
+    const records = await Attendance.find({ course: courseId, date: { $gte: startDate, $lte: endDate } }).sort({ date: 1 });
 
-    // Group by week
     const weeklyData = [];
     const weekMap = new Map();
 
@@ -1299,7 +1056,7 @@ export const getWeeklyComparison = async (req, res, next) => {
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay());
       const weekKey = weekStart.toISOString().split('T')[0];
-      
+
       if (!weekMap.has(weekKey)) {
         weekMap.set(weekKey, {
           week: `Week ${weekMap.size + 1}`,
@@ -1312,26 +1069,24 @@ export const getWeeklyComparison = async (req, res, next) => {
           classDays: new Set()
         });
       }
-      
+
       const week = weekMap.get(weekKey);
       week[record.status]++;
       week.total++;
-      
-      // Track which days had class
+
       const dayOfWeek = date.getDay();
       if (course.schedule?.days?.some(day => {
-        const dayMap = {'Sunday':0,'Monday':1,'Tuesday':2,'Wednesday':3,'Thursday':4,'Friday':5,'Saturday':6};
+        const dayMap = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
         return dayMap[day] === dayOfWeek;
       })) {
         week.classDays.add(date.toISOString().split('T')[0]);
       }
     });
 
-    // Calculate weekly percentages
     weekMap.forEach((week, key) => {
       const classDaysCount = week.classDays.size;
       const expectedTotal = classDaysCount * enrolledStudentIds.length;
-      
+
       weeklyData.push({
         week: week.week,
         present: expectedTotal > 0 ? Math.round((week.present / expectedTotal) * 100) : 0,
@@ -1343,10 +1098,7 @@ export const getWeeklyComparison = async (req, res, next) => {
       });
     });
 
-    res.json({
-      success: true,
-      data: weeklyData.slice(-weeks)
-    });
+    res.json({ success: true, data: weeklyData.slice(-weeks) });
 
   } catch (error) {
     next(errorHandler(500, error.message));
@@ -1355,6 +1107,7 @@ export const getWeeklyComparison = async (req, res, next) => {
 
 // @desc    Get all chart data for course (combined)
 // @route   GET /api/attendance/course/:courseId/charts
+// @access  Private (Admin/Instructor)
 export const getCourseChartData = async (req, res, next) => {
   try {
     const { courseId } = req.params;
@@ -1364,59 +1117,37 @@ export const getCourseChartData = async (req, res, next) => {
     const end = new Date(endDate || new Date());
     end.setHours(23, 59, 59, 999);
 
-    // Get all records for the period
-    const records = await Attendance.find({
-      course: courseId,
-      date: { $gte: start, $lte: end }
-    }).sort({ date: 1 });
-
+    const records = await Attendance.find({ course: courseId, date: { $gte: start, $lte: end } }).sort({ date: 1 });
     const course = await Course.findById(courseId);
     const enrolledCount = course?.enrolledStudents?.length || 0;
 
-    // Daily trend data
     const dailyMap = new Map();
     const weeklyMap = new Map();
     const statusCounts = { present: 0, absent: 0, late: 0, excused: 0 };
 
     records.forEach(record => {
       const dateStr = record.date.toISOString().split('T')[0];
-      
-      // Daily aggregation
+
       if (!dailyMap.has(dateStr)) {
-        dailyMap.set(dateStr, {
-          date: dateStr,
-          present: 0,
-          absent: 0,
-          late: 0,
-          excused: 0
-        });
+        dailyMap.set(dateStr, { date: dateStr, present: 0, absent: 0, late: 0, excused: 0 });
       }
       const day = dailyMap.get(dateStr);
       day[record.status]++;
-      
-      // Status counts
+
       statusCounts[record.status]++;
 
-      // Weekly aggregation
       const date = new Date(record.date);
       const weekStart = new Date(date);
       weekStart.setDate(date.getDate() - date.getDay());
       const weekKey = weekStart.toISOString().split('T')[0];
-      
+
       if (!weeklyMap.has(weekKey)) {
-        weeklyMap.set(weekKey, {
-          week: `Week ${weeklyMap.size + 1}`,
-          present: 0,
-          absent: 0,
-          late: 0,
-          excused: 0
-        });
+        weeklyMap.set(weekKey, { week: `Week ${weeklyMap.size + 1}`, present: 0, absent: 0, late: 0, excused: 0 });
       }
       const week = weeklyMap.get(weekKey);
       week[record.status]++;
     });
 
-    // Convert daily data to percentages
     const dailyTrend = Array.from(dailyMap.values()).map(day => ({
       date: day.date,
       present: enrolledCount > 0 ? Math.round((day.present / enrolledCount) * 100) : 0,
@@ -1425,7 +1156,6 @@ export const getCourseChartData = async (req, res, next) => {
       excused: enrolledCount > 0 ? Math.round((day.excused / enrolledCount) * 100) : 0
     }));
 
-    // Status distribution
     const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
     const statusDistribution = [
       { name: 'Present', value: statusCounts.present, color: '#10b981' },
@@ -1434,7 +1164,6 @@ export const getCourseChartData = async (req, res, next) => {
       { name: 'Excused', value: statusCounts.excused, color: '#3b82f6' }
     ].filter(item => item.value > 0);
 
-    // Weekly comparison
     const weeklyComparison = Array.from(weeklyMap.values()).map(week => {
       const expectedPerWeek = 7 * enrolledCount;
       return {
@@ -1455,12 +1184,108 @@ export const getCourseChartData = async (req, res, next) => {
         summary: {
           total,
           ...statusCounts,
-          attendanceRate: total > 0 
-            ? Math.round(((statusCounts.present + statusCounts.excused) / total) * 100) 
-            : 0
+          attendanceRate: total > 0 ? Math.round(((statusCounts.present + statusCounts.excused) / total) * 100) : 0
         }
       }
     });
+
+  } catch (error) {
+    next(errorHandler(500, error.message));
+  }
+};
+
+// @desc    Get attendance report for date range
+// @route   GET /api/attendance/reports
+// @access  Private (Admin/Instructor)
+export const getAttendanceReport = async (req, res, next) => {
+  try {
+    const { courseId, studentId, startDate, endDate, status, groupBy } = req.query;
+
+    if (!courseId && !studentId) {
+      return next(errorHandler(400, 'Either courseId or studentId is required'));
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const query = { date: { $gte: start, $lte: end } };
+    if (courseId) query.course = courseId;
+    if (studentId) query.student = studentId;
+    if (status) query.status = status;
+
+    const records = await Attendance.find(query)
+      .populate('student', 'studentId user')
+      .populate('course', 'courseCode name')
+      .sort({ date: 1 });
+
+    const summary = {
+      totalDays: 0,
+      totalRecords: records.length,
+      present: records.filter(r => r.status === 'present').length,
+      absent: records.filter(r => r.status === 'absent').length,
+      late: records.filter(r => r.status === 'late').length,
+      excused: records.filter(r => r.status === 'excused').length,
+    };
+
+    const uniqueDays = new Set(records.map(r => r.date.toISOString().split('T')[0]));
+    summary.totalDays = uniqueDays.size;
+
+    let enrolledCount = 0;
+    if (courseId) {
+      const course = await Course.findById(courseId);
+      enrolledCount = course?.enrolledStudents?.length || 0;
+    } else {
+      enrolledCount = 1;
+    }
+
+    const totalPossible = summary.totalDays * enrolledCount;
+    summary.attendanceRate = totalPossible > 0 ? ((summary.present + summary.excused) / totalPossible) * 100 : 0;
+    summary.averageAttendance = summary.totalDays > 0 ? (summary.present + summary.late) / summary.totalDays : 0;
+
+    let groupedData = [];
+    if (groupBy === 'week') {
+      const weekMap = new Map();
+      records.forEach(record => {
+        const date = new Date(record.date);
+        const weekStart = new Date(date);
+        weekStart.setDate(date.getDate() - date.getDay());
+        const weekKey = weekStart.toISOString().split('T')[0];
+
+        if (!weekMap.has(weekKey)) {
+          weekMap.set(weekKey, { date: weekKey, present: 0, absent: 0, late: 0, excused: 0 });
+        }
+        const week = weekMap.get(weekKey);
+        week[record.status]++;
+      });
+      groupedData = Array.from(weekMap.values());
+    } else if (groupBy === 'month') {
+      const monthMap = new Map();
+      records.forEach(record => {
+        const date = new Date(record.date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+        if (!monthMap.has(monthKey)) {
+          monthMap.set(monthKey, { date: monthKey, present: 0, absent: 0, late: 0, excused: 0 });
+        }
+        const month = monthMap.get(monthKey);
+        month[record.status]++;
+      });
+      groupedData = Array.from(monthMap.values());
+    } else {
+      groupedData = Array.from(uniqueDays).map(date => {
+        const dayRecords = records.filter(r => r.date.toISOString().split('T')[0] === date);
+        return {
+          date,
+          present: dayRecords.filter(r => r.status === 'present').length,
+          absent: dayRecords.filter(r => r.status === 'absent').length,
+          late: dayRecords.filter(r => r.status === 'late').length,
+          excused: dayRecords.filter(r => r.status === 'excused').length,
+        };
+      });
+    }
+
+    res.json({ success: true, data: groupedData, summary });
 
   } catch (error) {
     next(errorHandler(500, error.message));

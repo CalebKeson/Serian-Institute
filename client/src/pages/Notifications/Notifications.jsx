@@ -1,4 +1,4 @@
-// pages/Notifications/Notifications.jsx - UPDATED WITH SEPARATE FILTERS
+// pages/Notifications/Notifications.jsx - UPDATED WITH ALL NOTIFICATION TYPES
 import React, { useState, useEffect } from 'react';
 import Layout from '../../components/Layout/Layout';
 import { useNotificationStore } from '../../stores/notificationStore';
@@ -17,7 +17,6 @@ const Notifications = () => {
     loading 
   } = useNotificationStore();
   
-  // CHANGED: Separate type and status filters
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedNotifications, setSelectedNotifications] = useState([]);
@@ -26,12 +25,11 @@ const Notifications = () => {
   useEffect(() => {
     loadNotifications();
     fetchUnreadCount();
-  }, [typeFilter, statusFilter]); // CHANGED: Watch both filters
+  }, [typeFilter, statusFilter]);
   
   const loadNotifications = async () => {
-    const params = { limit: 50 };
+    const params = { limit: 100 }; // Increased limit to see more
     
-    // CHANGED: Apply both filters independently
     if (typeFilter !== 'all') {
       params.type = typeFilter;
     }
@@ -48,7 +46,6 @@ const Notifications = () => {
     toast.success('Notifications refreshed');
   };
   
-  // Reset all filters
   const handleResetFilters = () => {
     setTypeFilter('all');
     setStatusFilter('all');
@@ -79,13 +76,11 @@ const Notifications = () => {
     
     try {
       if (bulkAction === 'mark-read') {
-        // Mark selected as read
         for (const id of selectedNotifications) {
           await markAsRead(id);
         }
         toast.success(`${selectedNotifications.length} notifications marked as read`);
       } else if (bulkAction === 'delete') {
-        // Delete selected
         for (const id of selectedNotifications) {
           await deleteNotification(id);
         }
@@ -125,9 +120,27 @@ const Notifications = () => {
       student: '👨‍🎓',
       attendance: '✅',
       system: '⚙️',
-      alert: '🔔'
+      alert: '🔔',
+      payment: '💰',
+      grade: '📊',
+      event: '📅'
     };
     return icons[type] || '📢';
+  };
+  
+  const getTypeColor = (type) => {
+    const colors = {
+      request: 'bg-blue-100 text-blue-600',
+      course: 'bg-purple-100 text-purple-600',
+      student: 'bg-green-100 text-green-600',
+      attendance: 'bg-teal-100 text-teal-600',
+      system: 'bg-gray-100 text-gray-600',
+      alert: 'bg-red-100 text-red-600',
+      payment: 'bg-emerald-100 text-emerald-600',
+      grade: 'bg-indigo-100 text-indigo-600',
+      event: 'bg-orange-100 text-orange-600'
+    };
+    return colors[type] || 'bg-gray-100 text-gray-600';
   };
   
   const formatTime = (createdAt) => {
@@ -142,9 +155,13 @@ const Notifications = () => {
     return created.toLocaleDateString();
   };
   
-  // CHANGED: Update notification types without unread
+  // COMPLETE: All notification types from your system
   const notificationTypes = [
     { id: 'all', label: 'All Types', icon: '📢' },
+    { id: 'payment', label: 'Payments', icon: '💰' },
+    { id: 'grade', label: 'Grades', icon: '📊' },
+    { id: 'attendance', label: 'Attendance', icon: '✅' },
+    { id: 'event', label: 'Events', icon: '📅' },
     { id: 'request', label: 'Requests', icon: '📋' },
     { id: 'course', label: 'Courses', icon: '📚' },
     { id: 'student', label: 'Students', icon: '👨‍🎓' },
@@ -152,15 +169,25 @@ const Notifications = () => {
     { id: 'alert', label: 'Alerts', icon: '🔔' }
   ];
   
-  // NEW: Status filter options
   const statusOptions = [
-    { id: 'all', label: 'All Status', count: notifications.length },
-    { id: 'unread', label: 'Unread', count: unreadCount },
-    { id: 'read', label: 'Read', count: notifications.length - unreadCount }
+    { id: 'all', label: 'All Status' },
+    { id: 'unread', label: 'Unread' },
+    { id: 'read', label: 'Read' }
   ];
   
-  // Helper function to check if filters are active
   const areFiltersActive = typeFilter !== 'all' || statusFilter !== 'all';
+  
+  // Calculate counts for each type for display
+  const getTypeCount = (typeId) => {
+    if (typeId === 'all') return notifications.length;
+    return notifications.filter(n => n.type === typeId).length;
+  };
+  
+  const getStatusCount = (statusId) => {
+    if (statusId === 'all') return notifications.length;
+    if (statusId === 'unread') return notifications.filter(n => n.status === 'unread').length;
+    return notifications.filter(n => n.status === 'read').length;
+  };
   
   return (
     <Layout>
@@ -174,145 +201,152 @@ const Notifications = () => {
         </div>
         
         {/* Stats & Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Notifications</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
+                <p className="text-xs text-gray-500">Total</p>
+                <p className="text-xl font-bold text-gray-900">
                   {notifications.length}
                 </p>
               </div>
-              <div className="p-3 bg-blue-100 text-blue-600 rounded-lg">
-                <span className="text-xl">📢</span>
+              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                <span className="text-lg">📢</span>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Unread</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
+                <p className="text-xs text-gray-500">Unread</p>
+                <p className="text-xl font-bold text-yellow-600">
                   {unreadCount}
                 </p>
               </div>
-              <div className="p-3 bg-yellow-100 text-yellow-600 rounded-lg">
-                <span className="text-xl">🔔</span>
+              <div className="p-2 bg-yellow-100 text-yellow-600 rounded-lg">
+                <span className="text-lg">🔔</span>
               </div>
             </div>
           </div>
           
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Quick Actions</p>
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={handleMarkAllAsRead}
-                    className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    disabled={unreadCount === 0}
-                  >
-                    Mark All Read
-                  </button>
-                  <button
-                    onClick={handleRefresh}
-                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-                  >
-                    Refresh
-                  </button>
-                </div>
-              </div>
+              <button
+                onClick={handleMarkAllAsRead}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full"
+                disabled={unreadCount === 0}
+              >
+                Mark All Read
+              </button>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                onClick={handleRefresh}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex-1"
+              >
+                Refresh
+              </button>
+              <button
+                onClick={handleDeleteAll}
+                className="px-3 py-2 text-sm text-red-600 border border-red-300 rounded-lg hover:bg-red-50 flex-1"
+                disabled={notifications.length === 0}
+              >
+                Delete All
+              </button>
             </div>
           </div>
         </div>
         
-        {/* Filters - UPDATED WITH SEPARATE FILTERS */}
+        {/* Filters - Updated with all types */}
         <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-gray-700">Filter Notifications</span>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-gray-700">Filters</span>
             {areFiltersActive && (
               <button
                 onClick={handleResetFilters}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-xs text-blue-600 hover:text-blue-800"
               >
                 Reset filters
               </button>
             )}
           </div>
           
-          <div className="space-y-4">
-            {/* Type Filters */}
-            <div>
-              <span className="text-sm font-medium text-gray-700 mb-2 block">Type:</span>
-              <div className="flex flex-wrap gap-2">
-                {notificationTypes.map((type) => (
+          {/* Type Filters - Scrollable on mobile */}
+          <div className="mb-4">
+            <span className="text-xs font-medium text-gray-500 mb-2 block">Type</span>
+            <div className="flex flex-wrap gap-2">
+              {notificationTypes.map((type) => {
+                const count = getTypeCount(type.id);
+                return (
                   <button
                     key={type.id}
                     onClick={() => setTypeFilter(type.id)}
                     className={`px-3 py-1.5 text-sm rounded-lg flex items-center gap-2 transition-colors ${
                       typeFilter === type.id 
-                        ? 'bg-blue-100 text-blue-600 font-medium' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {type.icon && <span>{type.icon}</span>}
+                    <span>{type.icon}</span>
                     {type.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {/* Status Filters */}
-            <div>
-              <span className="text-sm font-medium text-gray-700 mb-2 block">Status:</span>
-              <div className="flex flex-wrap gap-2">
-                {statusOptions.map((status) => (
-                  <button
-                    key={status.id}
-                    onClick={() => setStatusFilter(status.id)}
-                    className={`px-3 py-1.5 text-sm rounded-lg flex items-center gap-2 transition-colors ${
-                      statusFilter === status.id 
-                        ? 'bg-blue-100 text-blue-600 font-medium' 
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {status.label}
-                    {status.count > 0 && (
-                      <span className={`px-1.5 py-0.5 text-xs rounded-full ${
-                        statusFilter === status.id 
-                          ? 'bg-blue-600 text-white' 
-                          : 'bg-gray-200 text-gray-700'
-                      }`}>
-                        {status.count}
+                    {count > 0 && typeFilter !== type.id && (
+                      <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded-full">
+                        {count}
                       </span>
                     )}
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </div>
           
-          {/* Active Filters Indicator */}
+          {/* Status Filters */}
+          <div>
+            <span className="text-xs font-medium text-gray-500 mb-2 block">Status</span>
+            <div className="flex flex-wrap gap-2">
+              {statusOptions.map((status) => {
+                const count = getStatusCount(status.id);
+                return (
+                  <button
+                    key={status.id}
+                    onClick={() => setStatusFilter(status.id)}
+                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                      statusFilter === status.id 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {status.label}
+                    {count > 0 && (
+                      <span className={`ml-1 text-xs ${
+                        statusFilter === status.id ? 'text-white' : 'text-gray-500'
+                      }`}>
+                        ({count})
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* Active Filters Summary */}
           {areFiltersActive && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <p className="text-sm text-gray-600">
-                Showing: 
-                <span className="font-medium text-gray-900 ml-1">
-                  {typeFilter !== 'all' ? `${typeFilter} ` : 'all types '}
-                  {statusFilter !== 'all' ? `${statusFilter} ` : 'all status '}
-                  notifications
-                </span>
-              </p>
+            <div className="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-500">
+              Showing {typeFilter !== 'all' ? typeFilter : 'all types'} • {statusFilter !== 'all' ? statusFilter : 'all status'}
             </div>
           )}
         </div>
         
         {/* Bulk Actions Bar */}
         {selectedNotifications.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-6">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-blue-900">
                   {selectedNotifications.length} selected
                 </span>
@@ -338,7 +372,7 @@ const Notifications = () => {
               
               <button
                 onClick={() => setSelectedNotifications([])}
-                className="text-sm text-blue-600 hover:text-blue-800"
+                className="text-xs text-blue-600 hover:text-blue-800"
               >
                 Clear selection
               </button>
@@ -348,126 +382,110 @@ const Notifications = () => {
         
         {/* Notifications List */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Notifications {notifications.length > 0 && `(${notifications.length})`}
-              </h2>
-              
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={selectedNotifications.length === notifications.length && notifications.length > 0}
-                    onChange={handleSelectAll}
-                    className="rounded border-gray-300"
-                  />
-                  Select all
-                </label>
-                
-                <button
-                  onClick={handleDeleteAll}
-                  className="text-sm text-red-600 hover:text-red-800"
-                  disabled={notifications.length === 0}
-                >
-                  Delete all
-                </button>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedNotifications.length === notifications.length && notifications.length > 0}
+                  onChange={handleSelectAll}
+                  className="rounded border-gray-300"
+                />
+                <h2 className="font-medium text-gray-900">
+                  Notifications {notifications.length > 0 && `(${notifications.length})`}
+                </h2>
               </div>
             </div>
           </div>
           
           {loading ? (
             <div className="p-8 text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <p className="mt-2 text-gray-600">Loading notifications...</p>
+              <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              <p className="mt-2 text-sm text-gray-500">Loading...</p>
             </div>
           ) : notifications.length === 0 ? (
             <div className="p-12 text-center">
               <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                 <span className="text-2xl">🔔</span>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <h3 className="text-base font-medium text-gray-900 mb-1">
                 {statusFilter === 'unread' ? 'No unread notifications' : 'No notifications found'}
               </h3>
-              <p className="text-gray-600">
+              <p className="text-sm text-gray-500">
                 {statusFilter === 'unread' 
-                  ? 'You have read all your notifications. Great job!' 
+                  ? 'You\'re all caught up!' 
                   : areFiltersActive 
                     ? 'Try changing your filter settings' 
-                    : 'New notifications will appear here when you have updates.'}
+                    : 'New notifications will appear here'}
               </p>
-              {areFiltersActive && (
-                <button
-                  onClick={handleResetFilters}
-                  className="mt-4 px-4 py-2 text-blue-600 hover:text-blue-800"
-                >
-                  Reset filters
-                </button>
-              )}
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
               {notifications.map((notification) => (
                 <div
                   key={notification._id}
-                  className={`p-6 hover:bg-gray-50 transition-colors ${
+                  className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
                     notification.status === 'unread' ? 'bg-blue-50/30' : ''
                   }`}
+                  onClick={() => {
+                    if (notification.status === 'unread') {
+                      markAsRead(notification._id);
+                    }
+                    if (notification.actionUrl) {
+                      window.location.href = notification.actionUrl;
+                    }
+                  }}
                 >
-                  <div className="flex items-start gap-4">
-                    {/* Checkbox for selection */}
+                  <div className="flex items-start gap-3">
+                    {/* Checkbox */}
                     <input
                       type="checkbox"
                       checked={selectedNotifications.includes(notification._id)}
-                      onChange={() => handleSelectNotification(notification._id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleSelectNotification(notification._id);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
                       className="mt-1 rounded border-gray-300"
                     />
                     
                     {/* Icon */}
-                    <div className="flex-shrink-0">
-                      <div className={`p-3 rounded-lg ${
-                        notification.type === 'request' ? 'bg-blue-100 text-blue-600' :
-                        notification.type === 'course' ? 'bg-purple-100 text-purple-600' :
-                        notification.type === 'student' ? 'bg-green-100 text-green-600' :
-                        notification.type === 'alert' ? 'bg-red-100 text-red-600' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>
-                        <span className="text-xl">{getTypeIcon(notification.type)}</span>
-                      </div>
+                    <div className={`flex-shrink-0 p-2 rounded-lg ${getTypeColor(notification.type)}`}>
+                      <span className="text-base">{getTypeIcon(notification.type)}</span>
                     </div>
                     
                     {/* Content */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <h3 className="font-medium text-gray-900">
+                      <div className="flex items-start justify-between gap-2 flex-wrap">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900 text-sm">
                             {notification.title}
-                          </h3>
-                          <p className="text-gray-600 mt-1">
+                          </p>
+                          <p className="text-gray-600 text-xs mt-0.5 line-clamp-2">
                             {notification.message}
                           </p>
                           
-                          <div className="flex items-center gap-3 mt-2">
-                            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">
-                              {notification.type}
-                            </span>
-                            <span className="text-xs text-gray-500">
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-xs text-gray-400">
                               {formatTime(notification.createdAt)}
                             </span>
                             {notification.status === 'unread' && (
-                              <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                                Unread
+                              <span className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
+                                New
                               </span>
                             )}
                           </div>
                         </div>
                         
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {/* Action buttons */}
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {notification.status === 'unread' && (
                             <button
-                              onClick={() => markAsRead(notification._id)}
-                              className="p-1.5 text-blue-600 hover:text-blue-800"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markAsRead(notification._id);
+                              }}
+                              className="p-1 text-gray-400 hover:text-blue-600 rounded"
                               title="Mark as read"
                             >
                               ✓
@@ -475,22 +493,15 @@ const Notifications = () => {
                           )}
                           
                           <button
-                            onClick={() => deleteNotification(notification._id)}
-                            className="p-1.5 text-gray-400 hover:text-red-600"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteNotification(notification._id);
+                            }}
+                            className="p-1 text-gray-400 hover:text-red-600 rounded"
                             title="Delete"
                           >
                             ✕
                           </button>
-                          
-                          {notification.actionUrl && (
-                            <a
-                              href={notification.actionUrl}
-                              className="p-1.5 text-gray-400 hover:text-blue-600"
-                              title="Go to"
-                            >
-                              ↗
-                            </a>
-                          )}
                         </div>
                       </div>
                     </div>

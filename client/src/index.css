@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+/* Global responsive adjustments */
+@media (max-width: 640px) {
+  /* Reduce base spacing on mobile */
+  .container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  
+  /* Adjust card padding on mobile */
+  .card-padding {
+    padding: 0.75rem;
+  }
+}
+
+/* Smooth transitions for interactive elements */
+button, 
+a {
+  transition: all 0.2s ease;
+}
+
+/* Better touch targets on mobile */
+@media (max-width: 768px) {
+  button, 
+  [role="button"],
+  .clickable {
+    min-height: 44px;
+  }
+}

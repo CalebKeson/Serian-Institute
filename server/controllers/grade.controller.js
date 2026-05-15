@@ -7,6 +7,7 @@ import Enrollment from '../models/enrollment.model.js';
 import { errorHandler } from '../utils/error.js';
 import { validateAcademicYear, getCurrentAcademicYear, validateGradeData } from '../utils/gradeValidation.js';
 import mongoose from 'mongoose';
+import NotificationService from '../services/notificationService.js';
 
 // @desc    Create a single grade
 // @route   POST /api/grades
@@ -23,13 +24,17 @@ export const createGrade = async (req, res, next) => {
     }
 
     // Check if student exists
-    const student = await Student.findById(gradeData.student);
+    const student = await Student.findById(gradeData.student)
+      .populate('user', 'name email');
+    
     if (!student) {
       return next(errorHandler(404, 'Student not found'));
     }
 
     // Check if course exists
-    const course = await Course.findById(gradeData.course);
+    const course = await Course.findById(gradeData.course)
+      .populate('instructor', 'name email');
+    
     if (!course) {
       return next(errorHandler(404, 'Course not found'));
     }
@@ -73,6 +78,47 @@ export const createGrade = async (req, res, next) => {
       .populate('student', 'studentId user')
       .populate('course', 'courseCode name')
       .populate('gradedBy', 'name email');
+
+    // ============= NOTIFICATIONS =============
+    try {
+      const studentName = student.user?.name || 'Student';
+      const courseName = course.name;
+      const assessmentType = grade.assessmentType === 'final' ? 'Final Grade' : grade.assessmentType;
+      const gradeDisplay = grade.letterGrade || `${grade.percentage}%`;
+
+      // 1. Notify the student
+      if (student.user) {
+        await NotificationService.createNotification({
+          recipientId: student.user._id,
+          title: '📊 New Grade Posted',
+          message: `Your ${assessmentType} grade for ${courseName} has been posted. Grade: ${gradeDisplay}. ${grade.comments ? `Comments: ${grade.comments}` : ''}`,
+          type: 'grade',
+          actionUrl: `/grades`
+        });
+      }
+
+      // 2. Notify the instructor (if different from grader)
+      if (course.instructor && course.instructor._id.toString() !== req.user.id) {
+        await NotificationService.createNotification({
+          recipientId: course.instructor._id,
+          title: '📊 Grade Posted',
+          message: `A grade of ${gradeDisplay} was posted for ${studentName} in ${courseName} by ${req.user.name || 'an instructor'}.`,
+          type: 'grade',
+          actionUrl: `/courses/${course._id}/grades`
+        });
+      }
+
+      // 3. Notify admins
+      await NotificationService.createForRole('admin', {
+        title: '📊 New Grade Recorded',
+        message: `${studentName} received ${gradeDisplay} in ${courseName} for ${assessmentType}.`,
+        type: 'grade',
+        actionUrl: `/grades/${grade._id}`
+      });
+
+    } catch (notificationError) {
+      console.error('Failed to send grade notifications:', notificationError);
+    }
 
     res.status(201).json({
       success: true,
@@ -158,6 +204,42 @@ export const bulkCreateGrades = async (req, res, next) => {
 
     await session.commitTransaction();
     session.endSession();
+
+    // ============= NOTIFICATION FOR BULK CREATE =============
+    if (results.successful.length > 0) {
+      try {
+        const course = await Course.findById(grades[0]?.course).populate('instructor', 'name email');
+        const courseName = course?.name || 'Course';
+
+        // Notify admins about bulk grade upload
+        await NotificationService.createForRole('admin', {
+          title: '📊 Bulk Grades Uploaded',
+          message: `${results.successful.length} grade(s) were uploaded for ${courseName} by ${req.user.name || 'an instructor'}. ${results.errors.length} failed.`,
+          type: 'grade',
+          actionUrl: `/courses/${grades[0]?.course}/grades`
+        });
+
+        // Notify affected students (limit to first 10 to avoid spam)
+        const notifiedStudents = new Set();
+        for (const grade of results.successful.slice(0, 10)) {
+          if (!notifiedStudents.has(grade.student.toString())) {
+            notifiedStudents.add(grade.student.toString());
+            const student = await Student.findById(grade.student).populate('user', 'name email');
+            if (student?.user) {
+              await NotificationService.createNotification({
+                recipientId: student.user._id,
+                title: '📊 New Grades Posted',
+                message: `New grades have been posted for ${courseName}. Please check your grade portal for details.`,
+                type: 'grade',
+                actionUrl: `/grades`
+              });
+            }
+          }
+        }
+      } catch (notificationError) {
+        console.error('Failed to send bulk grade notifications:', notificationError);
+      }
+    }
 
     res.status(201).json({
       success: true,
@@ -248,15 +330,17 @@ export const getStudentGrades = async (req, res, next) => {
     const { academicYear, courseId, page = 1, limit = 50 } = req.query;
 
     // Check permissions
+    let studentName = '';
     if (req.user.role === 'student') {
       const student = await Student.findOne({ user: req.user._id });
       if (!student || student._id.toString() !== studentId) {
         return next(errorHandler(403, 'Access denied'));
       }
+      studentName = student.user?.name || '';
     }
 
     // Check if student exists
-    const student = await Student.findById(studentId);
+    const student = await Student.findById(studentId).populate('user', 'name email');
     if (!student) {
       return next(errorHandler(404, 'Student not found'));
     }
@@ -396,7 +480,11 @@ export const updateGrade = async (req, res, next) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const grade = await Grade.findById(id);
+    const grade = await Grade.findById(id)
+      .populate('student', 'studentId')
+      .populate('student.user', 'name email')
+      .populate('course', 'courseCode name');
+    
     if (!grade) {
       return next(errorHandler(404, 'Grade not found'));
     }
@@ -405,6 +493,11 @@ export const updateGrade = async (req, res, next) => {
     if (req.user.role !== 'admin' && grade.gradedBy.toString() !== req.user.id) {
       return next(errorHandler(403, 'Not authorized to update this grade'));
     }
+
+    // Track changes for notification
+    const changes = [];
+    const oldPercentage = grade.percentage;
+    const oldLetter = grade.letterGrade;
 
     // Validate score if being updated
     if (updates.score && updates.maxScore) {
@@ -417,6 +510,14 @@ export const updateGrade = async (req, res, next) => {
       }
     }
 
+    // Record changes
+    if (updates.score && updates.score !== grade.score) {
+      changes.push(`score changed from ${grade.score}/${grade.maxScore} to ${updates.score}/${grade.maxScore || updates.maxScore}`);
+    }
+    if (updates.letterGrade && updates.letterGrade !== grade.letterGrade) {
+      changes.push(`letter grade changed from ${grade.letterGrade} to ${updates.letterGrade}`);
+    }
+
     const updatedGrade = await Grade.findByIdAndUpdate(
       id,
       { ...updates, updatedAt: Date.now() },
@@ -425,6 +526,44 @@ export const updateGrade = async (req, res, next) => {
       .populate('student', 'studentId user')
       .populate('course', 'courseCode name')
       .populate('gradedBy', 'name email');
+
+    // ============= NOTIFICATIONS FOR UPDATE =============
+    if (changes.length > 0 && grade.student?.user) {
+      try {
+        const courseName = grade.course.name;
+        const studentName = grade.student.user?.name || 'Student';
+
+        // Notify the student about grade change
+        await NotificationService.createNotification({
+          recipientId: grade.student.user._id,
+          title: '📝 Grade Updated',
+          message: `Your grade for ${courseName} has been updated. Changes: ${changes.join(', ')}. Please review your updated grade.`,
+          type: 'grade',
+          actionUrl: `/grades`
+        });
+
+        // Notify instructor (if different from updater)
+        if (grade.gradedBy.toString() !== req.user.id) {
+          await NotificationService.createNotification({
+            recipientId: grade.gradedBy,
+            title: '📝 Grade Modified',
+            message: `A grade you posted for ${studentName} in ${courseName} was modified by ${req.user.name || 'an admin'}. Changes: ${changes.join(', ')}`,
+            type: 'grade',
+            actionUrl: `/courses/${grade.course._id}/grades`
+          });
+        }
+
+        // Notify admins
+        await NotificationService.createForRole('admin', {
+          title: '📝 Grade Modified',
+          message: `${studentName}'s grade in ${courseName} was updated by ${req.user.name || 'an instructor'}. Changes: ${changes.join(', ')}`,
+          type: 'grade',
+          actionUrl: `/grades/${updatedGrade._id}`
+        });
+      } catch (notificationError) {
+        console.error('Failed to send grade update notifications:', notificationError);
+      }
+    }
 
     res.json({
       success: true,
@@ -444,7 +583,11 @@ export const deleteGrade = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const grade = await Grade.findById(id);
+    const grade = await Grade.findById(id)
+      .populate('student', 'studentId')
+      .populate('student.user', 'name email')
+      .populate('course', 'courseCode name');
+    
     if (!grade) {
       return next(errorHandler(404, 'Grade not found'));
     }
@@ -454,11 +597,133 @@ export const deleteGrade = async (req, res, next) => {
       return next(errorHandler(403, 'Not authorized to delete this grade'));
     }
 
+    const studentName = grade.student?.user?.name || 'Student';
+    const courseName = grade.course.name;
+    const gradeDisplay = grade.letterGrade || `${grade.percentage}%`;
+
     await grade.deleteOne();
+
+    // ============= NOTIFICATIONS FOR DELETE =============
+    try {
+      // Notify the student
+      if (grade.student?.user) {
+        await NotificationService.createNotification({
+          recipientId: grade.student.user._id,
+          title: '⚠️ Grade Removed',
+          message: `Your grade (${gradeDisplay}) for ${courseName} has been removed from the system. If you believe this is an error, please contact your instructor.`,
+          type: 'alert',
+          actionUrl: `/grades`
+        });
+      }
+
+      // Notify the instructor who graded it
+      if (grade.gradedBy && grade.gradedBy.toString() !== req.user.id) {
+        await NotificationService.createNotification({
+          recipientId: grade.gradedBy,
+          title: '🗑️ Grade Deleted',
+          message: `The grade you posted for ${studentName} in ${courseName} (${gradeDisplay}) was deleted by ${req.user.name || 'an admin'}.`,
+          type: 'alert',
+          actionUrl: `/courses/${grade.course._id}/grades`
+        });
+      }
+
+      // Notify admins
+      await NotificationService.createForRole('admin', {
+        title: '🗑️ Grade Deleted',
+        message: `${studentName}'s grade (${gradeDisplay}) in ${courseName} was deleted by ${req.user.name || 'an instructor'}.`,
+        type: 'grade',
+        actionUrl: `/courses/${grade.course._id}/grades`
+      });
+    } catch (notificationError) {
+      console.error('Failed to send grade deletion notifications:', notificationError);
+    }
 
     res.json({
       success: true,
       message: 'Grade deleted successfully'
+    });
+
+  } catch (error) {
+    next(errorHandler(500, error.message));
+  }
+};
+
+// @desc    Publish grades for a course
+// @route   POST /api/grades/publish/:courseId
+// @access  Private (Instructor/Admin)
+export const publishGrades = async (req, res, next) => {
+  try {
+    const { courseId } = req.params;
+    const { studentIds, assessmentIds, sendNotifications = true } = req.body;
+
+    const query = { course: courseId };
+    
+    if (studentIds && studentIds.length > 0) {
+      query.student = { $in: studentIds };
+    }
+    
+    if (assessmentIds && assessmentIds.length > 0) {
+      query._id = { $in: assessmentIds };
+    }
+
+    const gradesToPublish = await Grade.find(query)
+      .populate('student', 'studentId')
+      .populate('student.user', 'name email')
+      .populate('course', 'courseCode name');
+
+    const result = await Grade.updateMany(
+      query,
+      { isPublished: true }
+    );
+
+    // ============= NOTIFICATIONS FOR PUBLISHING =============
+    if (sendNotifications && result.modifiedCount > 0) {
+      try {
+        const courseName = gradesToPublish[0]?.course?.name || 'Course';
+        
+        // Notify admins
+        await NotificationService.createForRole('admin', {
+          title: '📊 Grades Published',
+          message: `${result.modifiedCount} grade(s) were published for ${courseName} by ${req.user.name || 'an instructor'}.`,
+          type: 'grade',
+          actionUrl: `/courses/${courseId}/grades`
+        });
+
+        // Notify affected students (limit to first 20 to avoid spam)
+        const notifiedStudents = new Set();
+        for (const grade of gradesToPublish.slice(0, 20)) {
+          if (!notifiedStudents.has(grade.student?._id?.toString())) {
+            notifiedStudents.add(grade.student?._id?.toString());
+            if (grade.student?.user) {
+              await NotificationService.createNotification({
+                recipientId: grade.student.user._id,
+                title: '📊 Grades Available',
+                message: `Your grades for ${courseName} have been published and are now available for viewing.`,
+                type: 'grade',
+                actionUrl: `/grades`
+              });
+            }
+          }
+        }
+
+        // If more than 20 students, send a summary notification
+        if (gradesToPublish.length > 20) {
+          await NotificationService.createForRole('admin', {
+            title: '📊 Bulk Grade Publication',
+            message: `${gradesToPublish.length} students have had grades published for ${courseName}. Individual notifications were sent to a sample of students.`,
+            type: 'grade',
+            actionUrl: `/courses/${courseId}/grades`
+          });
+        }
+      } catch (notificationError) {
+        console.error('Failed to send grade publication notifications:', notificationError);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: result,
+      message: `Published ${result.modifiedCount} grades`
     });
 
   } catch (error) {
@@ -472,7 +737,14 @@ export const deleteGrade = async (req, res, next) => {
 export const calculateFinalGrade = async (req, res, next) => {
   try {
     const { studentId, courseId } = req.params;
-    const { term, academicYear } = req.body;
+    const { term, academicYear, publishImmediately = false } = req.body;
+
+    const student = await Student.findById(studentId).populate('user', 'name email');
+    const course = await Course.findById(courseId);
+
+    if (!student || !course) {
+      return next(errorHandler(404, 'Student or course not found'));
+    }
 
     const query = {
       student: studentId,
@@ -505,7 +777,7 @@ export const calculateFinalGrade = async (req, res, next) => {
     const gradingScale = await GradingScale.getDefaultScale();
     const letterGrade = gradingScale.getLetterGrade(finalPercentage);
 
-    // Create a final grade record (optional)
+    // Create a final grade record
     const finalGrade = await Grade.create({
       student: studentId,
       course: courseId,
@@ -520,9 +792,39 @@ export const calculateFinalGrade = async (req, res, next) => {
       academicYear: academicYear || getCurrentAcademicYear(),
       assessmentDate: new Date(),
       gradedBy: req.user.id,
-      isPublished: false,
+      isPublished: publishImmediately,
       comments: `Calculated from ${grades.length} assessments`
     });
+
+    // ============= NOTIFICATION FOR FINAL GRADE =============
+    try {
+      if (student.user) {
+        const gradeDisplay = letterGrade || `${finalPercentage.toFixed(1)}%`;
+        let message = `Your final grade for ${course.name} has been calculated: ${gradeDisplay}.`;
+        if (publishImmediately) {
+          message += ` This grade has been published to your record.`;
+        } else {
+          message += ` The grade is pending review and will be published soon.`;
+        }
+
+        await NotificationService.createNotification({
+          recipientId: student.user._id,
+          title: '🎓 Final Grade Calculated',
+          message: message,
+          type: 'grade',
+          actionUrl: `/grades`
+        });
+      }
+
+      await NotificationService.createForRole('admin', {
+        title: '🎓 Final Grade Calculated',
+        message: `Final grade of ${letterGrade || finalPercentage.toFixed(1)}% calculated for ${student.user?.name || 'Student'} in ${course.name}.`,
+        type: 'grade',
+        actionUrl: `/grades/${finalGrade._id}`
+      });
+    } catch (notificationError) {
+      console.error('Failed to send final grade notification:', notificationError);
+    }
 
     res.json({
       success: true,
@@ -536,40 +838,6 @@ export const calculateFinalGrade = async (req, res, next) => {
         }
       },
       message: 'Final grade calculated successfully'
-    });
-
-  } catch (error) {
-    next(errorHandler(500, error.message));
-  }
-};
-
-// @desc    Publish grades for a course
-// @route   POST /api/grades/publish/:courseId
-// @access  Private (Instructor/Admin)
-export const publishGrades = async (req, res, next) => {
-  try {
-    const { courseId } = req.params;
-    const { studentIds, assessmentIds } = req.body;
-
-    const query = { course: courseId };
-    
-    if (studentIds && studentIds.length > 0) {
-      query.student = { $in: studentIds };
-    }
-    
-    if (assessmentIds && assessmentIds.length > 0) {
-      query._id = { $in: assessmentIds };
-    }
-
-    const result = await Grade.updateMany(
-      query,
-      { isPublished: true }
-    );
-
-    res.json({
-      success: true,
-      data: result,
-      message: `Published ${result.modifiedCount} grades`
     });
 
   } catch (error) {
@@ -795,6 +1063,18 @@ export const createGradingScale = async (req, res, next) => {
       ...scaleData,
       createdBy: req.user.id
     });
+
+    // ============= NOTIFICATION FOR NEW GRADING SCALE =============
+    try {
+      await NotificationService.createForRole('admin', {
+        title: '📏 New Grading Scale Created',
+        message: `${req.user.name || 'An admin'} created a new grading scale: ${scale.name}`,
+        type: 'system',
+        actionUrl: `/grades/scales`
+      });
+    } catch (notificationError) {
+      console.error('Failed to send grading scale notification:', notificationError);
+    }
 
     res.status(201).json({
       success: true,

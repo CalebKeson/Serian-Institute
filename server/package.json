@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --trace-warnings --watch --env-file=.env server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "init-income-sources": "node --env-file=.env scripts/createInitialIncomeSources.js"
   },
   "keywords": [],
   "author": "",
