@@ -32,7 +32,7 @@ const PORT = process.env.PORT || 5000;
 // Connect to database
 connectDB();
 
-// ==================== CORS CONFIGURATION - VERCEL FRIENDLY ====================
+// ==================== CORS CONFIGURATION ====================
 const allowedOrigins = [
   'https://sbtc.ac.ke',
   'https://www.sbtc.ac.ke',
@@ -43,11 +43,10 @@ const allowedOrigins = [
   'http://localhost:5000'
 ];
 
-// Simple CORS middleware that always responds to OPTIONS
+// CORS middleware
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Check if origin is allowed
   if (allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
   }
@@ -56,7 +55,6 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
   res.header('Access-Control-Allow-Credentials', 'true');
   
-  // Handle preflight requests immediately
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -66,7 +64,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// ==================== HEALTH CHECK (BEFORE ROUTES) ====================
+// ==================== HEALTH CHECK ====================
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -128,19 +126,11 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/events', eventRoutes);
 
 // ==================== INCOME & EXPENSE ROUTES ====================
-
-// Income Management
 app.use('/api/income-sources', incomeSourceRoutes);
 app.use('/api/income', incomeTransactionRoutes);
-
-// Director Management
 app.use('/api/directors', directorRoutes);
-
-// Expense Management
 app.use('/api/expense-categories', expenseCategoryRoutes);
 app.use('/api/expenses', expenseRoutes);
-
-// Financial Reports
 app.use('/api/financial', financialReportRoutes);
 
 // ==================== ERROR HANDLING MIDDLEWARE ====================
@@ -161,15 +151,16 @@ app.use((error, req, res, next) => {
   });
 });
 
-// 404 handler for undefined routes
-app.use('*', (req, res) => {
+// ==================== 404 HANDLER - FIXED ====================
+// Instead of app.use('*', ...), use app.use with no path or a regex
+app.use((req, res) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
   }
   res.status(404).json({
     success: false,
-    message: `Cannot ${req.method} ${req.originalUrl}`
+    message: `Cannot ${req.method} ${req.originalUrl} - Route not found`
   });
 });
 
