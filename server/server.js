@@ -18,7 +18,7 @@ import dashboardRoutes from './routes/dashboard.route.js';
 import reportsRoutes from './routes/reports.route.js';
 import eventRoutes from './routes/event.route.js';
 
-// NEW: Income & Expense routes
+// Income & Expense routes
 import incomeSourceRoutes from './routes/incomeSource.route.js'; 
 import incomeTransactionRoutes from './routes/incomeTransaction.route.js';
 import directorRoutes from './routes/director.route.js';
@@ -35,6 +35,7 @@ connectDB();
 // ==================== CORS CONFIGURATION ====================
 const allowedOrigins = [
   'https://sbtc.ac.ke',
+  'https://www.sbtc.ac.ke',
   'https://serian-institute-live.vercel.app',
   'https://serian-institute.vercel.app',
   'http://localhost:3000',
@@ -45,12 +46,15 @@ const allowedOrigins = [
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      return callback(null, true);
+    }
     
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+    // Check if origin is allowed
+    if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      console.log('Blocked origin:', origin);
+      console.log('❌ Blocked origin:', origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -60,12 +64,34 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
 };
 
-// Apply CORS middleware (this handles OPTIONS automatically)
+// Apply CORS middleware
 app.use(cors(corsOptions));
 
-// REMOVED: app.options('*', cors(corsOptions)); // This was causing the error
+// Handle preflight requests explicitly (for Vercel)
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 app.use(express.json());
+
+// ==================== HEALTH CHECK (BEFORE ROUTES) ====================
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV,
+    cors_enabled: true,
+    allowed_origins: allowedOrigins
+  });
+});
 
 // Basic route
 app.get("/", (req, res) => {
@@ -115,7 +141,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/events', eventRoutes);
 
-// ==================== NEW INCOME & EXPENSE ROUTES ====================
+// ==================== INCOME & EXPENSE ROUTES ====================
 
 // Income Management
 app.use('/api/income-sources', incomeSourceRoutes);
@@ -131,25 +157,29 @@ app.use('/api/expenses', expenseRoutes);
 // Financial Reports
 app.use('/api/financial', financialReportRoutes);
 
-// ==================== HEALTH CHECK ====================
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV,
-    cors_enabled: true
-  });
-});
-
-// Error handling middleware
+// ==================== ERROR HANDLING MIDDLEWARE ====================
 app.use((error, req, res, next) => {
   const statusCode = error.statusCode || 500;
   const message = error.message || "Internal Server Error";
-  res.status(statusCode).json({ statusCode, success: false, message });
+  console.error('Error:', error);
+  res.status(statusCode).json({ 
+    statusCode, 
+    success: false, 
+    message 
+  });
 });
 
+// 404 handler for undefined routes
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Cannot ${req.method} ${req.originalUrl}`
+  });
+});
+
+// Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`CORS enabled for origins:`, allowedOrigins);
+  console.log(`✅ CORS enabled for origins:`, allowedOrigins);
+  console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
