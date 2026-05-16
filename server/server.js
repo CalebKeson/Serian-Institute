@@ -32,7 +32,7 @@ const PORT = process.env.PORT || 5000;
 // Connect to database
 connectDB();
 
-// ==================== CORS CONFIGURATION ====================
+// ==================== CORS CONFIGURATION - VERCEL FRIENDLY ====================
 const allowedOrigins = [
   'https://sbtc.ac.ke',
   'https://www.sbtc.ac.ke',
@@ -43,40 +43,25 @@ const allowedOrigins = [
   'http://localhost:5000'
 ];
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    // Check if origin is allowed
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('❌ Blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-};
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
-
-// Handle preflight requests explicitly (for Vercel)
-app.options('*', (req, res) => {
+// Simple CORS middleware that always responds to OPTIONS
+app.use((req, res, next) => {
   const origin = req.headers.origin;
+  
+  // Check if origin is allowed
   if (allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
   }
+  
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
+  
+  // Handle preflight requests immediately
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
 });
 
 app.use(express.json());
@@ -89,7 +74,8 @@ app.get('/api/health', (req, res) => {
     uptime: process.uptime(),
     environment: process.env.NODE_ENV,
     cors_enabled: true,
-    allowed_origins: allowedOrigins
+    allowed_origins: allowedOrigins,
+    request_origin: req.headers.origin || 'no origin'
   });
 });
 
@@ -162,6 +148,12 @@ app.use((error, req, res, next) => {
   const statusCode = error.statusCode || 500;
   const message = error.message || "Internal Server Error";
   console.error('Error:', error);
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
   res.status(statusCode).json({ 
     statusCode, 
     success: false, 
@@ -171,6 +163,10 @@ app.use((error, req, res, next) => {
 
 // 404 handler for undefined routes
 app.use('*', (req, res) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
   res.status(404).json({
     success: false,
     message: `Cannot ${req.method} ${req.originalUrl}`
@@ -183,3 +179,6 @@ app.listen(PORT, () => {
   console.log(`✅ CORS enabled for origins:`, allowedOrigins);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+
+// Export for Vercel serverless function
+export default app;
