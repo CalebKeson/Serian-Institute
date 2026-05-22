@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
 import { useAuthStore } from '../../stores/authStore';
+import { Lock, Eye, EyeOff, ArrowLeft, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const ResetPassword = () => {
@@ -17,8 +18,11 @@ const ResetPassword = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [email, setEmail] = useState('');
+  const [logoError, setLogoError] = useState(false);
   
   const { validateResetToken, resetPassword } = useAuthStore();
+
+  const LOGO_URL = "/images/logo.png";
 
   // Validate token on component mount
   useEffect(() => {
@@ -62,7 +66,6 @@ const ResetPassword = () => {
     
     const { password, confirmPassword } = formData;
     
-    // Validation
     if (password.length < 6) {
       toast.error('Password must be at least 6 characters');
       return;
@@ -93,133 +96,166 @@ const ResetPassword = () => {
     }
   };
 
+  const handleLogoError = () => setLogoError(true);
+
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Validating reset link...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500 mx-auto"></div>
+          <p className="mt-3 text-sm text-gray-500">Validating reset link...</p>
         </div>
       </div>
     );
   }
 
   if (!isValidToken) {
-    return null; // Will redirect in useEffect
+    return null;
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-green-600 to-blue-600 h-2 w-full"></div>
+    <div className="min-h-screen flex items-center justify-center p-3 bg-gray-50 relative overflow-hidden">
+      {/* Large Gradient Circles Behind Form */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Large Circle Top Left */}
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-gradient-to-br from-purple-400/30 via-purple-500/20 to-transparent blur-3xl"></div>
         
-        <div className="px-8 py-10">
-          <div className="text-center mb-8">
-            <div className="mx-auto h-16 w-16 bg-gradient-to-r from-green-600 to-blue-600 rounded-full flex items-center justify-center mb-4">
-              <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-800">
-              Create New Password
-            </h1>
-            <p className="text-gray-600 mt-2 text-sm">
-              For account: <span className="font-medium">{email}</span>
-            </p>
-            <p className="text-xs text-amber-600 mt-1">
-              ⚠️ Link expires in 5 minutes
-            </p>
-          </div>
+        {/* Medium Circle Top Right */}
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-gradient-to-bl from-blue-400/30 via-blue-500/20 to-transparent blur-3xl"></div>
+        
+        {/* Large Circle Bottom Right */}
+        <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] rounded-full bg-gradient-to-tl from-purple-500/20 via-blue-400/20 to-transparent blur-3xl"></div>
+        
+        {/* Small Circle Bottom Left */}
+        <div className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-gradient-to-tr from-blue-500/20 via-purple-400/20 to-transparent blur-3xl"></div>
+        
+        {/* Center Subtle Glow */}
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-gradient-to-r from-purple-300/10 via-blue-300/10 to-transparent blur-3xl"></div>
+      </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* New Password Field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                New Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="block w-full pl-4 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter new password"
-                  minLength={6}
+      {/* Main Container */}
+      <div className="w-full max-w-sm relative z-10">
+        {/* Card */}
+        <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
+          {/* Top accent bar */}
+          <div className="h-0.5 bg-gradient-to-r from-purple-400 via-purple-500 to-blue-500"></div>
+          
+          <div className="p-5">
+            {/* Logo */}
+            <div className="flex justify-center mb-4">
+              {!logoError ? (
+                <img
+                  src={LOGO_URL}
+                  alt="SBTC Logo"
+                  className="h-10 w-auto object-contain"
+                  onError={handleLogoError}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-blue-600"
-                >
-                  {showPassword ? '🙈' : '👁️'}
-                </button>
-              </div>
-              {formData.password && formData.password.length < 6 && (
-                <p className="mt-1 text-xs text-red-600">
-                  Must be at least 6 characters
-                </p>
-              )}
-            </div>
-
-            {/* Confirm Password Field */}
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  required
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="block w-full pl-4 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Confirm new password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-blue-600"
-                >
-                  {showConfirmPassword ? '🙈' : '👁️'}
-                </button>
-              </div>
-              {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                <p className="mt-1 text-xs text-red-600">
-                  Passwords do not match
-                </p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-3 px-4 bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white font-medium rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmitting ? (
-                <div className="flex items-center justify-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Updating...
-                </div>
               ) : (
-                'Reset Password'
+                <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl flex items-center justify-center shadow-md">
+                  <span className="text-white font-bold text-base">S</span>
+                </div>
               )}
-            </button>
-          </form>
+            </div>
 
-          <div className="mt-8 text-center">
-            <Link
-              to="/login"
-              className="text-blue-600 hover:text-blue-800 font-medium text-sm"
-            >
-              ← Back to Login
-            </Link>
+            {/* Title */}
+            <div className="text-center mb-4">
+              <h1 className="text-xl font-bold text-gray-800">Create New Password</h1>
+              <p className="text-gray-500 text-xs mt-0.5">
+                For: <span className="font-medium text-purple-600">{email}</span>
+              </p>
+              <p className="text-[10px] text-amber-600 mt-1">
+                ⚠️ Link expires in 5 minutes
+              </p>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {/* New Password Field */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">New Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <input
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={handleChange}
+                    className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-300 focus:border-purple-300 outline-none transition-all"
+                    placeholder="••••••"
+                    minLength={6}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-purple-500"
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                {formData.password && formData.password.length < 6 && (
+                  <p className="mt-1 text-[10px] text-red-500">Must be at least 6 characters</p>
+                )}
+              </div>
+
+              {/* Confirm Password Field */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Confirm Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <input
+                    name="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    className="w-full pl-9 pr-9 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-300 focus:border-purple-300 outline-none transition-all"
+                    placeholder="••••••"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-purple-500"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                  <p className="mt-1 text-[10px] text-red-500">Passwords do not match</p>
+                )}
+              </div>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-2 mt-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-lg font-semibold text-sm hover:shadow-lg transform hover:scale-[1.02] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  'Reset Password'
+                )}
+              </button>
+            </form>
+
+            {/* Back to Login Link */}
+            <div className="mt-4 text-center">
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-1 text-xs text-purple-500 hover:text-purple-600 transition-colors"
+              >
+                <ArrowLeft className="w-3 h-3" />
+                Back to Login
+              </Link>
+            </div>
           </div>
         </div>
+
+        {/* Footer */}
+        <p className="text-center text-[10px] text-gray-400 mt-4">
+          © 2026 Serian Institute. All rights reserved.
+        </p>
       </div>
     </div>
   );
