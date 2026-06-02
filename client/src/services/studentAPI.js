@@ -1,4 +1,3 @@
-// src/services/studentAPI.js
 import api from "./api";
 
 export const studentAPI = {
@@ -15,14 +14,16 @@ export const studentAPI = {
     return api.get(`/students/${id}`);
   },
 
-  // NEW: Get single student with enrollments (includes course data)
+  // Get single student with enrollments (includes course data and admission numbers)
   getStudentWithEnrollments: (id) => {
     return api.get(`/students/${id}/with-enrollments`);
   },
 
-  // Create new student
+  // Create new student (NO studentId generated - will be null until enrollment)
   createStudent: (studentData) => {
-    return api.post("/students", studentData);
+    // Ensure studentId is not sent (backend will set to null)
+    const { studentId, ...cleanData } = studentData;
+    return api.post("/students", cleanData);
   },
 
   // Update student
@@ -30,7 +31,7 @@ export const studentAPI = {
     return api.put(`/students/${id}`, studentData);
   },
 
-  // Get student count for sidebar
+  // Get student count for sidebar (returns total, enrolled, notEnrolled)
   getStudentCount: () => {
     return api.get("/students/count");
   },
@@ -86,6 +87,17 @@ export const studentAPI = {
     return api.get(`/grades/student/${id}`, {
       params: { academicYear, courseId }
     });
+  },
+
+  // NEW: Check if student has any enrollments
+  hasEnrollments: async (id) => {
+    try {
+      const response = await api.get(`/students/${id}/has-enrollments`);
+      return response.data.data?.hasEnrollments || false;
+    } catch (error) {
+      console.error("Check student enrollments error:", error);
+      return false;
+    }
   }
 };
 

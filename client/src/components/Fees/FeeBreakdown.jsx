@@ -1,4 +1,5 @@
-// src/components/Fees/FeeBreakdown.jsx
+// src/components/Fees/FeeBreakdown.jsx - UPDATED (removed unavailable fields)
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -16,7 +17,8 @@ import {
   Clock,
   Award,
   Download,
-  Eye
+  Eye,
+  User
 } from 'lucide-react';
 import { formatCurrency, calculateProgress, getProgressColor, getFeeStatusBadge } from '../../utils/feeFormatter';
 
@@ -84,12 +86,10 @@ const FeeBreakdown = ({
     }
   };
 
-  // FIXED: Handle record payment with navigation
   const handleRecordPayment = (course) => {
     if (onRecordPayment) {
       onRecordPayment(course);
     } else {
-      // Default navigation to record payment page with student and course
       const params = new URLSearchParams();
       params.append('studentId', studentId);
       params.append('courseId', course.courseId);
@@ -389,7 +389,7 @@ const FeeBreakdown = ({
                 )}
               </div>
 
-              {/* Expanded Details */}
+              {/* Expanded Details - REMOVED unavailable fields (Duration, Instructor, Last Payment, Payments Count) */}
               {isExpanded && (
                 <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -419,35 +419,54 @@ const FeeBreakdown = ({
                             </div>
                           ))}
                         </div>
+                        {course.payments.length > 3 && (
+                          <button className="mt-2 text-xs text-blue-600 hover:text-blue-700">
+                            View all {course.payments.length} payments
+                          </button>
+                        )}
                       </div>
                     )}
 
-                    {/* Course Info */}
+                    {/* If no payments history */}
+                    {(!course.payments || course.payments.length === 0) && (
+                      <div className="bg-white rounded-lg p-4 text-center border border-gray-200">
+                        <CreditCard className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">No payment history available</p>
+                        <button
+                          onClick={() => handleRecordPayment(course)}
+                          className="mt-2 text-sm text-green-600 hover:text-green-700"
+                        >
+                          Record first payment
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Quick Stats */}
                     <div>
                       <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                        <BookOpen className="w-4 h-4 mr-2 text-gray-500" />
-                        Course Information
+                        <TrendingUp className="w-4 h-4 mr-2 text-gray-500" />
+                        Payment Summary
                       </h4>
-                      <dl className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <dt className="text-gray-500">Duration:</dt>
-                          <dd className="font-medium text-gray-900">{course.duration || 'N/A'}</dd>
+                      <div className="bg-white rounded-lg p-3 border border-gray-200 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Total Fee:</span>
+                          <span className="font-medium text-gray-900">{formatCurrency(course.price)}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <dt className="text-gray-500">Instructor:</dt>
-                          <dd className="font-medium text-gray-900">{course.instructor || 'N/A'}</dd>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Total Paid:</span>
+                          <span className="font-medium text-green-600">{formatCurrency(course.paid)}</span>
                         </div>
-                        <div className="flex justify-between">
-                          <dt className="text-gray-500">Last Payment:</dt>
-                          <dd className="font-medium text-gray-900">
-                            {course.lastPaymentDate ? new Date(course.lastPaymentDate).toLocaleDateString() : 'N/A'}
-                          </dd>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Remaining:</span>
+                          <span className={`font-medium ${course.balance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                            {formatCurrency(course.balance)}
+                          </span>
                         </div>
-                        <div className="flex justify-between">
-                          <dt className="text-gray-500">Payments Count:</dt>
-                          <dd className="font-medium text-gray-900">{course.paymentsCount || 0}</dd>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">Payment Progress:</span>
+                          <span className="font-medium text-purple-600">{course.percentage || progress}%</span>
                         </div>
-                      </dl>
+                      </div>
                     </div>
                   </div>
 
@@ -455,7 +474,6 @@ const FeeBreakdown = ({
                   <div className="mt-4 flex justify-end">
                     <button
                       onClick={() => {
-                        // Export course payment data
                         const data = [['Date', 'Amount', 'Status']];
                         course.payments?.forEach(p => {
                           data.push([

@@ -1,4 +1,5 @@
-// controllers/payment.controller.js
+// backend/controllers/payment.controller.js - COMPLETE UPDATED VERSION
+
 import Payment from '../models/payment.model.js';
 import StudentFee from '../models/studentFee.model.js';
 import Course from '../models/course.model.js';
@@ -9,7 +10,7 @@ import mongoose from 'mongoose';
 import NotificationService from '../services/notificationService.js';
 import { createIncomeFromPayment } from '../services/incomeService.js';
 
-// @desc    Record a new payment
+// @desc    Record a new payment (UPDATED with payer info and receipt number)
 // @route   POST /api/payments
 // @access  Private (Admin, Receptionist)
 export const recordPayment = async (req, res, next) => {
@@ -24,9 +25,14 @@ export const recordPayment = async (req, res, next) => {
       paymentMethod,
       transactionId,
       paymentReference,
+      receiptNumber,
       paymentFor,
       paymentDate,
-      notes
+      notes,
+      payerName,
+      payerRelationship,
+      payerContact,
+      payerNotes
     } = req.body;
 
     // Validate required fields
@@ -34,6 +40,20 @@ export const recordPayment = async (req, res, next) => {
       await session.abortTransaction();
       session.endSession();
       return next(errorHandler(400, 'Student, course, amount, and payment method are required'));
+    }
+
+    // Validate payer name
+    if (!payerName) {
+      await session.abortTransaction();
+      session.endSession();
+      return next(errorHandler(400, 'Payer name is required'));
+    }
+
+    // Validate receipt number
+    if (!receiptNumber) {
+      await session.abortTransaction();
+      session.endSession();
+      return next(errorHandler(400, 'Receipt number is required'));
     }
 
     // Check if student exists
@@ -68,20 +88,31 @@ export const recordPayment = async (req, res, next) => {
       return next(errorHandler(400, 'Student is not enrolled in this course'));
     }
 
+    // Check for duplicate receipt number
+    const existingReceipt = await Payment.findOne({ 
+      receiptNumber: receiptNumber.toUpperCase().trim() 
+    }).session(session);
+    
+    if (existingReceipt) {
+      await session.abortTransaction();
+      session.endSession();
+      return next(errorHandler(400, 'Receipt number already exists'));
+    }
+
     // Check for duplicate transaction ID if provided
     if (transactionId) {
-      const existingPayment = await Payment.findOne({ 
+      const existingTransaction = await Payment.findOne({ 
         transactionId: transactionId.toUpperCase().trim() 
       }).session(session);
       
-      if (existingPayment) {
+      if (existingTransaction) {
         await session.abortTransaction();
         session.endSession();
         return next(errorHandler(400, 'Transaction ID already exists'));
       }
     }
 
-    // Create payment record
+    // Create payment record with new fields
     const [payment] = await Payment.create([{
       student: studentId,
       enrollment: enrollment._id,
@@ -90,14 +121,20 @@ export const recordPayment = async (req, res, next) => {
       paymentMethod,
       transactionId: transactionId ? transactionId.toUpperCase().trim() : undefined,
       paymentReference: paymentReference || undefined,
+      receiptNumber: receiptNumber.toUpperCase().trim(),
       paymentFor: paymentFor || 'tuition',
       paymentDate: paymentDate || new Date(),
       notes: notes || undefined,
       recordedBy: req.user._id,
-      status: 'completed'
+      status: 'completed',
+      // New fields
+      payerName: payerName.trim(),
+      payerRelationship: payerRelationship || 'self',
+      payerContact: payerContact || undefined,
+      payerNotes: payerNotes || undefined
     }], { session });
 
-    // ===== CREATE INCOME TRANSACTION FROM PAYMENT =====
+    // Create income transaction
     try {
       await createIncomeFromPayment(payment, course, student, req.user._id, session);
       console.log(`✅ Income transaction created for payment: ${payment._id}`);
@@ -107,13 +144,16 @@ export const recordPayment = async (req, res, next) => {
       session.endSession();
       return next(errorHandler(500, 'Payment processing failed: Unable to create income record'));
     }
-    // ===== END INCOME CREATION =====
 
     // Update or create student fee record
     await StudentFee.updateAfterPayment(studentId, courseId, payment._id, amount, session);
 
     await session.commitTransaction();
     session.endSession();
+
+    // Get updated outstanding balances for response
+    const outstandingBalances = await Payment.getStudentOutstandingBalances(studentId);
+    const paymentSummary = await Payment.getStudentPaymentSummary(studentId);
 
     // Populate payment for response
     const populatedPayment = await Payment.findById(payment._id)
@@ -128,7 +168,7 @@ export const recordPayment = async (req, res, next) => {
       .populate('course', 'courseCode name price')
       .populate('recordedBy', 'name email');
 
-    // ============= ENHANCED NOTIFICATIONS =============
+    // Send notifications
     try {
       const studentName = student.user?.name || 'Student';
       const courseName = course.name;
@@ -141,55 +181,32 @@ export const recordPayment = async (req, res, next) => {
         bank_transfer: 'Bank Transfer'
       }[paymentMethod] || paymentMethod;
 
-      // 1. Notify all admins
+      // Notify admins
       await NotificationService.createForRole('admin', {
         title: '💰 New Payment Received',
-        message: `Payment of ${formattedAmount} received from ${studentName} for ${courseName}. Method: ${paymentMethodDisplay}`,
+        message: `Payment of ${formattedAmount} received from ${studentName} for ${courseName}. Payer: ${payerName} (${payerRelationship}). Receipt: ${receiptNumber}`,
         type: 'payment',
         actionUrl: `/payments/${payment._id}`
       });
 
-      // 2. Notify the student
+      // Notify the student
       if (student.user) {
         await NotificationService.createNotification({
           recipientId: student.user._id,
           title: '✅ Payment Confirmed',
-          message: `Your payment of ${formattedAmount} via ${paymentMethodDisplay} has been received for ${courseName}. Transaction ID: ${payment.transactionId || 'N/A'}. Thank you for your payment!`,
+          message: `Your payment of ${formattedAmount} via ${paymentMethodDisplay} has been received for ${courseName}. Receipt Number: ${receiptNumber}. Thank you for your payment!`,
           type: 'payment',
           actionUrl: `/fees`
         });
       }
 
-      // 3. Get outstanding balance after payment
-      const studentFee = await StudentFee.findOne({ student: studentId });
-      let outstandingMessage = '';
-      if (studentFee) {
-        const courseFee = studentFee.courses.find(c => c.course.toString() === courseId);
-        if (courseFee && courseFee.remainingBalance > 0) {
-          outstandingMessage = ` Remaining balance: KSh ${courseFee.remainingBalance.toLocaleString()}.`;
-        } else if (courseFee && courseFee.remainingBalance <= 0) {
-          outstandingMessage = ` Your course fee is now fully paid! 🎉`;
-        }
-      }
-
-      // 4. Send follow-up notification with balance info
-      if (student.user && outstandingMessage) {
-        await NotificationService.createNotification({
-          recipientId: student.user._id,
-          title: '💰 Payment Update',
-          message: `${outstandingMessage}`,
-          type: 'payment',
-          actionUrl: `/fees`
-        });
-      }
-
-      // 5. Notify assigned instructor (if any)
+      // Notify instructor
       const courseWithInstructor = await Course.findById(courseId).populate('instructor', 'name email');
       if (courseWithInstructor?.instructor) {
         await NotificationService.createNotification({
           recipientId: courseWithInstructor.instructor._id,
           title: '💰 Student Payment',
-          message: `${studentName} has made a payment of ${formattedAmount} for ${courseName}.`,
+          message: `${studentName} has made a payment of ${formattedAmount} for ${courseName}. Receipt: ${receiptNumber}`,
           type: 'payment',
           actionUrl: `/courses/${courseId}/enrollments`
         });
@@ -201,7 +218,11 @@ export const recordPayment = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      data: populatedPayment,
+      data: {
+        payment: populatedPayment,
+        outstandingBalances,
+        paymentSummary
+      },
       message: 'Payment recorded successfully'
     });
 
@@ -212,7 +233,8 @@ export const recordPayment = async (req, res, next) => {
     console.error('Payment recording error:', error);
     
     if (error.code === 11000) {
-      return next(errorHandler(400, 'Duplicate transaction ID'));
+      const field = error.message.includes('receiptNumber') ? 'Receipt number' : 'Transaction ID';
+      return next(errorHandler(400, `${field} already exists`));
     }
     
     next(errorHandler(500, error.message));
@@ -234,7 +256,8 @@ export const getPayments = async (req, res, next) => {
       startDate,
       endDate,
       status = 'completed',
-      search
+      search,
+      payerName
     } = req.query;
 
     const query = { status };
@@ -244,6 +267,7 @@ export const getPayments = async (req, res, next) => {
     if (courseId) query.course = courseId;
     if (paymentMethod) query.paymentMethod = paymentMethod;
     if (paymentFor) query.paymentFor = paymentFor;
+    if (payerName) query.payerName = { $regex: payerName, $options: 'i' };
     
     if (startDate || endDate) {
       query.paymentDate = {};
@@ -251,11 +275,13 @@ export const getPayments = async (req, res, next) => {
       if (endDate) query.paymentDate.$lte = new Date(endDate);
     }
 
-    // Search by transaction ID or reference
+    // Search by receipt number, transaction ID, or reference
     if (search) {
       query.$or = [
+        { receiptNumber: { $regex: search, $options: 'i' } },
         { transactionId: { $regex: search, $options: 'i' } },
-        { paymentReference: { $regex: search, $options: 'i' } }
+        { paymentReference: { $regex: search, $options: 'i' } },
+        { payerName: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -343,7 +369,16 @@ export const updatePayment = async (req, res, next) => {
 
   try {
     const { id } = req.params;
-    const { amount, notes, status } = req.body;
+    const { 
+      amount, 
+      notes, 
+      status, 
+      receiptNumber,
+      payerName,
+      payerRelationship,
+      payerContact,
+      payerNotes 
+    } = req.body;
 
     const payment = await Payment.findById(id)
       .populate({
@@ -359,6 +394,20 @@ export const updatePayment = async (req, res, next) => {
       return next(errorHandler(404, 'Payment not found'));
     }
 
+    // Check for duplicate receipt number if being changed
+    if (receiptNumber && receiptNumber !== payment.receiptNumber) {
+      const existingReceipt = await Payment.findOne({ 
+        receiptNumber: receiptNumber.toUpperCase().trim(),
+        _id: { $ne: id }
+      }).session(session);
+      
+      if (existingReceipt) {
+        await session.abortTransaction();
+        session.endSession();
+        return next(errorHandler(400, 'Receipt number already exists'));
+      }
+    }
+
     // Store old values for comparison
     const oldAmount = payment.amount;
     const oldStatus = payment.status;
@@ -369,7 +418,21 @@ export const updatePayment = async (req, res, next) => {
       changes.push(`amount changed from KSh ${oldAmount.toLocaleString()} to KSh ${amount.toLocaleString()}`);
       payment.amount = amount;
     }
+    if (receiptNumber && receiptNumber !== payment.receiptNumber) {
+      changes.push(`receipt number changed from ${payment.receiptNumber} to ${receiptNumber}`);
+      payment.receiptNumber = receiptNumber.toUpperCase().trim();
+    }
+    if (payerName && payerName !== payment.payerName) {
+      changes.push(`payer name changed from ${payment.payerName} to ${payerName}`);
+      payment.payerName = payerName;
+    }
+    if (payerRelationship && payerRelationship !== payment.payerRelationship) {
+      changes.push(`payer relationship changed from ${payment.payerRelationshipDisplay} to ${payerRelationship}`);
+      payment.payerRelationship = payerRelationship;
+    }
     if (notes) payment.notes = notes;
+    if (payerContact) payment.payerContact = payerContact;
+    if (payerNotes) payment.payerNotes = payerNotes;
     if (status && status !== oldStatus) {
       changes.push(`status changed from ${oldStatus} to ${status}`);
       payment.status = status;
@@ -392,7 +455,8 @@ export const updatePayment = async (req, res, next) => {
           if (status === 'refunded') {
             studentFee.courses[courseIndex].totalPaid -= payment.amount;
           } else if (amount !== oldAmount) {
-            studentFee.courses[courseIndex].totalPaid += (parseFloat(amount) - parseFloat(oldAmount));
+            const diff = parseFloat(amount) - parseFloat(oldAmount);
+            studentFee.courses[courseIndex].totalPaid += diff;
           }
           await studentFee.save({ session });
         }
@@ -402,7 +466,7 @@ export const updatePayment = async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
-    // ============= NOTIFICATION FOR UPDATE =============
+    // Send notifications for updates
     if (changes.length > 0 && payment.student?.user) {
       try {
         await NotificationService.createNotification({
@@ -438,6 +502,43 @@ export const updatePayment = async (req, res, next) => {
   }
 };
 
+// @desc    Get student fee summary (for dropdown - shows outstanding balances)
+// @route   GET /api/payments/student/:studentId/summary
+// @access  Private
+export const getStudentFeeSummary = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+
+    // Check permissions
+    if (req.user.role === 'student') {
+      const student = await Student.findOne({ user: req.user._id });
+      if (!student || student._id.toString() !== studentId) {
+        return next(errorHandler(403, 'Access denied'));
+      }
+    }
+
+    // Get outstanding balances for dropdown
+    const outstandingBalances = await Payment.getStudentOutstandingBalances(studentId);
+    
+    // Get full payment summary
+    const paymentSummary = await Payment.getStudentPaymentSummary(studentId);
+
+    res.json({
+      success: true,
+      data: {
+        outstandingBalances,
+        paymentSummary,
+        hasOutstanding: outstandingBalances.some(c => c.remainingBalance > 0),
+        totalOutstanding: outstandingBalances.reduce((sum, c) => sum + c.remainingBalance, 0)
+      }
+    });
+
+  } catch (error) {
+    console.error('Get student fee summary error:', error);
+    next(errorHandler(500, error.message));
+  }
+};
+
 // @desc    Delete a payment
 // @route   DELETE /api/payments/:id
 // @access  Private (Admin only)
@@ -465,6 +566,7 @@ export const deletePayment = async (req, res, next) => {
     const studentName = payment.student?.user?.name || 'Student';
     const amount = payment.amount;
     const courseName = payment.course?.name || 'Course';
+    const receiptNumber = payment.receiptNumber;
 
     // Remove from StudentFee
     const studentFee = await StudentFee.findOne({ 
@@ -500,11 +602,11 @@ export const deletePayment = async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
-    // ============= NOTIFICATION FOR DELETION =============
+    // Send notifications
     try {
       await NotificationService.createForRole('admin', {
         title: '🗑️ Payment Record Deleted',
-        message: `Payment of KSh ${amount.toLocaleString()} from ${studentName} for ${courseName} was deleted by ${req.user.name || 'an admin'}.`,
+        message: `Payment of KSh ${amount.toLocaleString()} (Receipt: ${receiptNumber}) from ${studentName} for ${courseName} was deleted by ${req.user.name || 'an admin'}.`,
         type: 'payment',
         actionUrl: '/payments'
       });
@@ -513,7 +615,7 @@ export const deletePayment = async (req, res, next) => {
         await NotificationService.createNotification({
           recipientId: payment.student.user._id,
           title: '⚠️ Payment Record Removed',
-          message: `Your payment record of KSh ${amount.toLocaleString()} for ${courseName} has been removed from the system. If you believe this is an error, please contact the finance office immediately.`,
+          message: `Your payment record of KSh ${amount.toLocaleString()} (Receipt: ${receiptNumber}) for ${courseName} has been removed from the system. If you believe this is an error, please contact the finance office immediately.`,
           type: 'alert',
           actionUrl: `/fees`
         });
@@ -535,57 +637,6 @@ export const deletePayment = async (req, res, next) => {
   }
 };
 
-// @desc    Get student fee summary
-// @route   GET /api/payments/student/:studentId/summary
-// @access  Private
-export const getStudentFeeSummary = async (req, res, next) => {
-  try {
-    const { studentId } = req.params;
-
-    // Check permissions
-    if (req.user.role === 'student') {
-      const student = await Student.findOne({ user: req.user._id });
-      if (!student || student._id.toString() !== studentId) {
-        return next(errorHandler(403, 'Access denied'));
-      }
-    }
-
-    // Find or create student fee record
-    let studentFee = await StudentFee.findOne({ student: studentId })
-      .populate({
-        path: 'courses.course',
-        select: 'courseCode name price duration instructor'
-      });
-
-    if (!studentFee) {
-      studentFee = await StudentFee.create({
-        student: studentId,
-        courses: []
-      });
-    }
-
-    // ===== CHECK FOR OVERDUE FEES AND SEND REMINDER =====
-    const overdueCourses = studentFee.courses.filter(c => c.remainingBalance > 0);
-    if (overdueCourses.length > 0 && req.user.role !== 'student') {
-      // This is just for the summary - reminder notifications are handled elsewhere
-      console.log(`Student ${studentId} has ${overdueCourses.length} courses with outstanding balance`);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        summary: studentFee.paymentSummary,
-        courseBreakdown: studentFee.courseBreakdown,
-        courses: studentFee.courses
-      }
-    });
-
-  } catch (error) {
-    console.error('Get student fee summary error:', error);
-    next(errorHandler(500, error.message));
-  }
-};
-
 // @desc    Get payment statistics
 // @route   GET /api/payments/stats
 // @access  Private (Admin, Instructor)
@@ -600,7 +651,7 @@ export const getPaymentStats = async (req, res, next) => {
       data: stats[0] || {
         totalStats: [{ totalAmount: 0, totalPayments: 0, averageAmount: 0, minAmount: 0, maxAmount: 0 }],
         byMethod: [],
-        byPurpose: [],
+        byRelationship: [],
         byDay: [],
         byMonth: [],
         recentPayments: []
@@ -648,16 +699,20 @@ export const exportPayments = async (req, res, next) => {
       .populate('course', 'courseCode name')
       .sort({ paymentDate: -1 });
 
-    // Prepare CSV data
+    // Prepare CSV data with new fields
     const csvData = payments.map(p => ({
       'Date': new Date(p.paymentDate).toLocaleDateString(),
+      'Receipt Number': p.receiptNumber,
       'Student Name': p.student?.user?.name || 'N/A',
       'Student ID': p.student?.studentId || 'N/A',
       'Course Code': p.course?.courseCode || 'N/A',
       'Course Name': p.course?.name || 'N/A',
       'Amount': p.amount,
-      'Payment Method': p.paymentMethodDisplay || p.paymentMethod,
-      'Purpose': p.paymentForDisplay || p.paymentFor,
+      'Payment Method': p.paymentMethodDisplay,
+      'Purpose': p.paymentForDisplay,
+      'Payer Name': p.payerName,
+      'Payer Relationship': p.payerRelationshipDisplay,
+      'Payer Contact': p.payerContact || 'N/A',
       'Transaction ID': p.transactionId || 'N/A',
       'Reference': p.paymentReference || 'N/A',
       'Notes': p.notes || ''
@@ -700,26 +755,21 @@ export const sendOverdueReminder = async (req, res, next) => {
       return next(errorHandler(404, 'Student not found'));
     }
 
-    const studentFee = await StudentFee.findOne({ student: studentId })
-      .populate('courses.course', 'courseCode name price');
-
-    if (!studentFee) {
-      return next(errorHandler(404, 'No fee records found for this student'));
-    }
-
-    let targetCourses = studentFee.courses;
+    const outstandingBalances = await Payment.getStudentOutstandingBalances(studentId);
+    
+    let targetCourses = outstandingBalances;
     if (courseId) {
-      targetCourses = targetCourses.filter(c => c.course._id.toString() === courseId);
+      targetCourses = targetCourses.filter(c => c.courseId.toString() === courseId);
     }
 
     const overdueCourses = targetCourses.filter(c => c.remainingBalance > 0);
     
     if (overdueCourses.length === 0) {
-      return next(errorHandler(400, 'No overdue fees found for this student'));
+      return next(errorHandler(400, 'No outstanding fees found for this student'));
     }
 
     const totalOutstanding = overdueCourses.reduce((sum, c) => sum + c.remainingBalance, 0);
-    const courseList = overdueCourses.map(c => `${c.course.name}: KSh ${c.remainingBalance.toLocaleString()}`).join('\n');
+    const courseList = overdueCourses.map(c => `${c.courseName}: KSh ${c.remainingBalance.toLocaleString()}`).join('\n');
 
     const message = customMessage || `Dear ${student.user.name},\n\nThis is a friendly reminder that you have outstanding fee balances for the following courses:\n\n${courseList}\n\nTotal Outstanding: KSh ${totalOutstanding.toLocaleString()}\n\nPlease make your payment as soon as possible to avoid any disruptions.\n\nThank you for your prompt attention to this matter.\n\n- Finance Office, Serian Institute`;
 

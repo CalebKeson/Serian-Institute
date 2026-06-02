@@ -1,4 +1,5 @@
-// frontend/src/pages/Instructors/AddInstructor.jsx
+// frontend/src/pages/Instructors/AddInstructor.jsx - COMPLETE FIXED VERSION
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -27,32 +28,25 @@ import {
 import Layout from "../../components/Layout/Layout";
 import { useInstructorStore } from "../../stores/instructorStore";
 import { useAuthStore } from "../../stores/authStore";
-import { useUserStore } from "../../stores/userStore";
 import { formatInstructorForAPI } from "../../utils/instructorDataFormatter";
 import toast from "react-hot-toast";
 
 const AddInstructor = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { createInstructor, loading } = useInstructorStore();
-  const { users, fetchUsers } = useUserStore();
+  const { createInstructor, instructors, fetchInstructors, loading } = useInstructorStore();
 
   const [formData, setFormData] = useState({
-    // User fields
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
-
-    // Professional Information
     department: "",
     designation: "Instructor",
     specialization: "",
     qualifications: [],
     certifications: [],
     expertise: [],
-
-    // Employment Details
     hireDate: "",
     instructorSince: "",
     employmentType: "full-time",
@@ -60,8 +54,6 @@ const AddInstructor = () => {
     contractEndDate: "",
     contractDuration: "",
     supervisor: "",
-
-    // Compensation
     salary: "",
     salaryCurrency: "KES",
     paymentSchedule: "monthly",
@@ -72,8 +64,6 @@ const AddInstructor = () => {
       branch: "",
     },
     benefits: [],
-
-    // Personal Information
     phone: "",
     personalEmail: "",
     dateOfBirth: "",
@@ -89,13 +79,10 @@ const AddInstructor = () => {
       relationship: "",
       phone: "",
     },
-
-    // Professional Status
     maxWorkload: 5,
     notes: "",
   });
 
-  // Temporary state for dynamic arrays
   const [newQualification, setNewQualification] = useState({
     degree: "",
     institution: "",
@@ -116,14 +103,13 @@ const AddInstructor = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Fetch users for supervisor dropdown
+  // Fetch instructors for supervisor dropdown
   useEffect(() => {
     if (user?.role === "admin") {
-      fetchUsers({ role: ["admin", "instructor"] });
+      fetchInstructors();
     }
-  }, [user]);
+  }, [user, fetchInstructors]);
 
-  // Check if user is admin
   if (user?.role !== "admin") {
     navigate("/instructors");
     return null;
@@ -132,7 +118,6 @@ const AddInstructor = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    // Handle nested objects
     if (name.startsWith("address.")) {
       const field = name.split(".")[1];
       setFormData((prev) => ({
@@ -155,13 +140,11 @@ const AddInstructor = () => {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
 
-    // Clear error
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
   };
 
-  // Qualification handlers
   const addQualification = () => {
     if (newQualification.degree && newQualification.institution) {
       setFormData((prev) => ({
@@ -185,7 +168,6 @@ const AddInstructor = () => {
     }));
   };
 
-  // Certification handlers
   const addCertification = () => {
     if (newCertification.name && newCertification.issuingBody) {
       setFormData((prev) => ({
@@ -214,7 +196,6 @@ const AddInstructor = () => {
     }));
   };
 
-  // Expertise handlers
   const addExpertise = () => {
     if (newExpertise.trim()) {
       setFormData((prev) => ({
@@ -232,7 +213,6 @@ const AddInstructor = () => {
     }));
   };
 
-  // Benefits handlers
   const addBenefit = () => {
     if (newBenefit.trim()) {
       setFormData((prev) => ({
@@ -253,42 +233,31 @@ const AddInstructor = () => {
   const validateForm = () => {
     const newErrors = {};
 
-    // Required fields validation
     if (!formData.name.trim()) newErrors.name = "Full name is required";
     if (!formData.email.trim()) newErrors.email = "Email is required";
     if (!formData.password) newErrors.password = "Password is required";
-    if (!formData.confirmPassword)
-      newErrors.confirmPassword = "Please confirm password";
+    if (!formData.confirmPassword) newErrors.confirmPassword = "Please confirm password";
     if (!formData.department) newErrors.department = "Department is required";
-    if (!formData.specialization)
-      newErrors.specialization = "Specialization is required";
+    if (!formData.specialization) newErrors.specialization = "Specialization is required";
     if (!formData.phone) newErrors.phone = "Phone number is required";
     if (!formData.hireDate) newErrors.hireDate = "Hire date is required";
 
-    // Email validation
-    if (
-      formData.email &&
-      !/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(formData.email)
-    ) {
+    if (formData.email && !/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(formData.email)) {
       newErrors.email = "Please enter a valid email address";
     }
 
-    // Password validation
     if (formData.password && formData.password.length < 6) {
       newErrors.password = "Password must be at least 6 characters";
     }
 
-    // Password match
     if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords do not match";
     }
 
-    // Phone validation
     if (formData.phone && !/^\d{10}$/.test(formData.phone.replace(/\D/g, ""))) {
       newErrors.phone = "Please enter a valid 10-digit phone number";
     }
 
-    // Salary validation
     if (formData.salary && formData.salary < 0) {
       newErrors.salary = "Salary cannot be negative";
     }
@@ -296,8 +265,6 @@ const AddInstructor = () => {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-
-  // In AddInstructor.jsx, find the handleSubmit function and update it:
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -311,23 +278,18 @@ const AddInstructor = () => {
 
     try {
       const { confirmPassword, ...submitData } = formData;
-
-      // Clean up empty strings for supervisor field
       const cleanedData = {
         ...submitData,
-        supervisor: submitData.supervisor || null, // Convert empty string to null
+        supervisor: submitData.supervisor || null,
         contractStartDate: submitData.contractStartDate || null,
         contractEndDate: submitData.contractEndDate || null,
       };
 
       const dataToSend = formatInstructorForAPI(cleanedData, true);
-
       const result = await createInstructor(dataToSend);
 
       if (result.success && result.data) {
-        toast.success(
-          `Instructor created successfully! Employee ID: ${result.data.employeeId}`,
-        );
+        toast.success(`Instructor created successfully! Employee ID: ${result.data.employeeId}`);
         navigate(`/instructors/${result.data._id}`);
       } else {
         toast.error(result.message || "Failed to create instructor");
@@ -347,7 +309,6 @@ const AddInstructor = () => {
   return (
     <Layout>
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -370,7 +331,6 @@ const AddInstructor = () => {
           </div>
         </div>
 
-        {/* Form */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <form onSubmit={handleSubmit} className="p-6 space-y-8">
             {/* Account Information Section */}
@@ -381,9 +341,7 @@ const AddInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Full Name *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
                   <input
                     type="text"
                     name="name"
@@ -394,15 +352,11 @@ const AddInstructor = () => {
                     }`}
                     placeholder="Enter full name"
                   />
-                  {errors.name && (
-                    <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-                  )}
+                  {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Address *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
                   <input
                     type="email"
                     name="email"
@@ -413,15 +367,11 @@ const AddInstructor = () => {
                     }`}
                     placeholder="instructor@serian.ac.ke"
                   />
-                  {errors.email && (
-                    <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                  )}
+                  {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Password *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Password *</label>
                   <div className="relative">
                     <input
                       type={showPassword ? "text" : "password"}
@@ -438,24 +388,14 @@ const AddInstructor = () => {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 transform -translate-y-1/2"
                     >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {errors.password && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.password}
-                    </p>
-                  )}
+                  {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Confirm Password *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password *</label>
                   <div className="relative">
                     <input
                       type={showConfirmPassword ? "text" : "password"}
@@ -463,31 +403,19 @@ const AddInstructor = () => {
                       value={formData.confirmPassword}
                       onChange={handleChange}
                       className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                        errors.confirmPassword
-                          ? "border-red-300"
-                          : "border-gray-300"
+                        errors.confirmPassword ? "border-red-300" : "border-gray-300"
                       }`}
                       placeholder="Confirm password"
                     />
                     <button
                       type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       className="absolute right-3 top-1/2 transform -translate-y-1/2"
                     >
-                      {showConfirmPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {errors.confirmPassword && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.confirmPassword}
-                    </p>
-                  )}
+                  {errors.confirmPassword && <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>}
                 </div>
               </div>
             </div>
@@ -500,9 +428,7 @@ const AddInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Department *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department *</label>
                   <input
                     type="text"
                     name="department"
@@ -511,17 +437,11 @@ const AddInstructor = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="e.g., Computer Science, Driving School"
                   />
-                  {errors.department && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.department}
-                    </p>
-                  )}
+                  {errors.department && <p className="mt-1 text-sm text-red-600">{errors.department}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Designation
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Designation</label>
                   <input
                     type="text"
                     name="designation"
@@ -533,9 +453,7 @@ const AddInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Specialization *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Specialization *</label>
                   <input
                     type="text"
                     name="specialization"
@@ -544,17 +462,11 @@ const AddInstructor = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="e.g., Web Development, Defensive Driving"
                   />
-                  {errors.specialization && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.specialization}
-                    </p>
-                  )}
+                  {errors.specialization && <p className="mt-1 text-sm text-red-600">{errors.specialization}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Supervisor
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Supervisor</label>
                   <select
                     name="supervisor"
                     value={formData.supervisor}
@@ -562,9 +474,9 @@ const AddInstructor = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select Supervisor</option>
-                    {users?.map((user) => (
-                      <option key={user._id} value={user._id}>
-                        {user.name} ({user.role})
+                    {instructors?.map((instructor) => (
+                      <option key={instructor._id} value={instructor.user?._id || instructor._id}>
+                        {instructor.user?.name || instructor.name} ({instructor.department || 'Instructor'})
                       </option>
                     ))}
                   </select>
@@ -578,20 +490,14 @@ const AddInstructor = () => {
                 <GraduationCap className="w-5 h-5 mr-2 text-blue-600" />
                 Qualifications
               </h2>
-
-              {/* Qualifications List */}
+              
               {formData.qualifications.length > 0 && (
                 <div className="mb-4 space-y-2">
                   {formData.qualifications.map((qual, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                    >
+                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div>
                         <p className="font-medium">{qual.degree}</p>
-                        <p className="text-sm text-gray-600">
-                          {qual.institution} ({qual.year})
-                        </p>
+                        <p className="text-sm text-gray-600">{qual.institution} ({qual.year})</p>
                       </div>
                       <button
                         type="button"
@@ -605,43 +511,27 @@ const AddInstructor = () => {
                 </div>
               )}
 
-              {/* Add Qualification Form */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <input
                   type="text"
-                  placeholder="Degree (e.g., PhD, MSc)"
+                  placeholder="Degree"
                   value={newQualification.degree}
-                  onChange={(e) =>
-                    setNewQualification({
-                      ...newQualification,
-                      degree: e.target.value,
-                    })
-                  }
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  onChange={(e) => setNewQualification({ ...newQualification, degree: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg"
                 />
                 <input
                   type="text"
                   placeholder="Institution"
                   value={newQualification.institution}
-                  onChange={(e) =>
-                    setNewQualification({
-                      ...newQualification,
-                      institution: e.target.value,
-                    })
-                  }
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  onChange={(e) => setNewQualification({ ...newQualification, institution: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg"
                 />
                 <input
                   type="number"
                   placeholder="Year"
                   value={newQualification.year}
-                  onChange={(e) =>
-                    setNewQualification({
-                      ...newQualification,
-                      year: e.target.value,
-                    })
-                  }
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  onChange={(e) => setNewQualification({ ...newQualification, year: e.target.value })}
+                  className="px-4 py-2 border border-gray-300 rounded-lg"
                 />
                 <button
                   type="button"
@@ -661,9 +551,7 @@ const AddInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Hire Date *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Hire Date *</label>
                   <input
                     type="date"
                     name="hireDate"
@@ -671,17 +559,11 @@ const AddInstructor = () => {
                     onChange={handleChange}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
-                  {errors.hireDate && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors.hireDate}
-                    </p>
-                  )}
+                  {errors.hireDate && <p className="mt-1 text-sm text-red-600">{errors.hireDate}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Employment Type
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Employment Type</label>
                   <select
                     name="employmentType"
                     value={formData.employmentType}
@@ -696,9 +578,7 @@ const AddInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Max Workload (Courses)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Max Workload (Courses)</label>
                   <input
                     type="number"
                     name="maxWorkload"
@@ -720,9 +600,7 @@ const AddInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Monthly Salary
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Salary</label>
                   <input
                     type="number"
                     name="salary"
@@ -731,15 +609,11 @@ const AddInstructor = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="0"
                   />
-                  {errors.salary && (
-                    <p className="mt-1 text-sm text-red-600">{errors.salary}</p>
-                  )}
+                  {errors.salary && <p className="mt-1 text-sm text-red-600">{errors.salary}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payment Schedule
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Schedule</label>
                   <select
                     name="paymentSchedule"
                     value={formData.paymentSchedule}
@@ -752,11 +626,8 @@ const AddInstructor = () => {
                 </div>
               </div>
 
-              {/* Bank Account */}
               <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <h3 className="text-md font-medium text-gray-900 mb-3">
-                  Bank Account
-                </h3>
+                <h3 className="text-md font-medium text-gray-900 mb-3">Bank Account</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input
                     type="text"
@@ -802,26 +673,22 @@ const AddInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
                   <input
                     type="tel"
                     name="phone"
                     value={formData.phone}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                      errors.phone ? "border-red-300" : "border-gray-300"
+                    }`}
                     placeholder="0712345678"
                   />
-                  {errors.phone && (
-                    <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
-                  )}
+                  {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone}</p>}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Personal Email (Optional)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Personal Email (Optional)</label>
                   <input
                     type="email"
                     name="personalEmail"
@@ -833,9 +700,7 @@ const AddInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Date of Birth
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
                   <input
                     type="date"
                     name="dateOfBirth"
@@ -846,9 +711,7 @@ const AddInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Gender
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
                   <select
                     name="gender"
                     value={formData.gender}
@@ -880,9 +743,7 @@ const AddInstructor = () => {
                 className="px-6 py-3 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 <Save className="w-4 h-4 inline mr-2" />
-                {isSubmitting || loading
-                  ? "Creating Instructor..."
-                  : "Create Instructor"}
+                {isSubmitting || loading ? "Creating Instructor..." : "Create Instructor"}
               </button>
             </div>
           </form>

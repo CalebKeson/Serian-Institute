@@ -1,4 +1,5 @@
-// src/components/Fees/Fees.jsx
+// src/components/Fees/Fees.jsx - COMPLETE UPDATED WITH PROPER EXPORT
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -27,6 +28,7 @@ import FeeStatsCards from './FeeStatsCards';
 import PaymentMethodChart from './PaymentMethodChart';
 import OutstandingTable from './OutstandingTable';
 import ExportButtons from './ExportButtons';
+import { feesDashboardExportConfig } from '../../utils/exportConfigs';
 import toast from 'react-hot-toast';
 
 const Fees = () => {
@@ -51,15 +53,41 @@ const Fees = () => {
     paymentFor: '',
     status: 'completed'
   });
+  const [exportSummary, setExportSummary] = useState({
+    totalFees: 0,
+    totalCollected: 0,
+    outstandingBalance: 0,
+    totalPayments: 0,
+    collectionRate: 0
+  });
 
   // Load initial data
   useEffect(() => {
     loadDashboardData();
   }, []);
 
+  // Update export summary when data loads
+  useEffect(() => {
+    if (paymentStats && outstandingReport) {
+      const totalCollected = paymentStats?.totalStats?.[0]?.totalAmount || 0;
+      const totalPayments = paymentStats?.totalStats?.[0]?.totalPayments || 0;
+      const outstandingBalance = outstandingReport?.summary?.totalOutstanding || 0;
+      const totalFees = totalCollected + outstandingBalance;
+      const collectionRate = totalFees > 0 ? (totalCollected / totalFees) * 100 : 0;
+      
+      setExportSummary({
+        totalFees,
+        totalCollected,
+        outstandingBalance,
+        totalPayments,
+        collectionRate
+      });
+    }
+  }, [paymentStats, outstandingReport]);
+
   const loadDashboardData = async () => {
     await Promise.all([
-      fetchPayments({ limit: 5 }),
+      fetchPayments({ limit: 50 }),
       fetchPaymentStats(getDateRangeParams()),
       fetchOutstandingReport()
     ]);
@@ -121,7 +149,6 @@ const Fees = () => {
     navigate(`/fees/course/${courseId}`);
   };
 
-  // FIXED: Navigate to record payment page
   const handleRecordPayment = () => {
     navigate('/fees/record-payment');
   };
@@ -145,6 +172,23 @@ const Fees = () => {
   };
 
   const recentPayments = paymentStats?.recentPayments || [];
+  const outstandingTotal = outstandingReport?.summary?.totalOutstanding || 0;
+  const totalCollected = stats.totalAmount;
+  const totalFees = totalCollected + outstandingTotal;
+  const collectionRate = totalFees > 0 ? (totalCollected / totalFees) * 100 : 0;
+
+  // Prepare export data - formatted for the fees dashboard report with payer name and receipt number
+  const exportData = recentPayments.map(payment => ({
+    date: new Date(payment.paymentDate).toLocaleDateString(),
+    studentName: payment.studentName || 'N/A',
+    studentId: payment.studentId || 'N/A',
+    course: payment.courseName || 'N/A',
+    courseCode: payment.courseCode || 'N/A',
+    amount: payment.amount,
+    payerName: payment.payerName || 'N/A',
+    receiptNumber: payment.receiptNumber || 'N/A',
+    reference: payment.transactionId || payment.paymentReference || 'N/A'
+  }));
 
   return (
     <Layout>
@@ -173,28 +217,14 @@ const Fees = () => {
               </button>
 
               <ExportButtons
-                data={recentPayments}
-                filename="fee_dashboard"
+                data={exportData}
+                config={feesDashboardExportConfig}
+                filename="fees_dashboard_report"
                 formats={['csv', 'excel', 'pdf', 'print', 'email']}
-                onExport={handleExport}
                 includeDateRange={true}
-                includeFilters={true}
-                customHeaders={['Date', 'Student', 'Course', 'Amount', 'Method', 'Status']}
-                customFormatter={(payment, format) => {
-                  if (format === 'csv') {
-                    return [
-                      new Date(payment.paymentDate).toLocaleDateString(),
-                      payment.studentName,
-                      `${payment.courseCode} - ${payment.courseName}`,
-                      payment.amount,
-                      payment.paymentMethodDisplay,
-                      payment.status
-                    ];
-                  }
-                  return payment;
-                }}
                 buttonStyle="default"
-                buttonText="Export"
+                buttonText="Export Report"
+                customSummaryData={exportSummary}
               />
 
               <button
@@ -208,14 +238,68 @@ const Fees = () => {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <FeeStatsCards 
-          stats={stats}
-          outstandingTotal={outstandingReport?.summary?.totalOutstanding || 0}
-          outstandingCount={outstandingReport?.summary?.totalStudents || 0}
-          dateRange={dateRange}
-          onDateRangeChange={setDateRange}
-        />
+        {/* Stats Cards - 5 metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Total Fees</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalFees)}</p>
+              </div>
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <DollarSign className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Total Collected</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(totalCollected)}</p>
+              </div>
+              <div className="p-3 bg-green-100 rounded-lg">
+                <TrendingUp className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Outstanding Balance</p>
+                <p className="text-2xl font-bold text-orange-600">{formatCurrency(outstandingTotal)}</p>
+              </div>
+              <div className="p-3 bg-orange-100 rounded-lg">
+                <AlertCircle className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Total Payments</p>
+                <p className="text-2xl font-bold text-blue-600">{stats.totalPayments}</p>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <CreditCard className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Collection Rate</p>
+                <p className="text-2xl font-bold text-purple-600">{Math.round(collectionRate)}%</p>
+              </div>
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <TrendingUp className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
@@ -272,6 +356,9 @@ const Fees = () => {
                               <p className="text-xs text-gray-500">
                                 {payment.courseCode} • {payment.courseName}
                               </p>
+                              <p className="text-xs text-gray-400">
+                                Receipt: {payment.receiptNumber || 'N/A'} | Payer: {payment.payerName || 'N/A'}
+                              </p>
                             </div>
                           </div>
                           <div className="text-right">
@@ -308,7 +395,14 @@ const Fees = () => {
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Total Outstanding</span>
                   <span className="text-xl font-bold text-orange-600">
-                    {formatCurrency(outstandingReport?.summary?.totalOutstanding || 0)}
+                    {formatCurrency(outstandingTotal)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">Collection Rate</span>
+                  <span className="text-xl font-bold text-purple-600">
+                    {Math.round(collectionRate)}%
                   </span>
                 </div>
 
@@ -361,9 +455,9 @@ const Fees = () => {
 
             {/* Payment Method Summary */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Today's Collections</h3>
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Payment Methods</h3>
               <div className="space-y-2">
-                {paymentStats?.byMethod?.slice(0, 3).map((method, index) => {
+                {paymentStats?.byMethod?.map((method, index) => {
                   const methodInfo = getPaymentMethodInfo(method.method);
                   return (
                     <div key={index} className="flex items-center justify-between">
@@ -371,9 +465,14 @@ const Fees = () => {
                         <div className={`w-2 h-2 rounded-full bg-${methodInfo.color}-500`}></div>
                         <span className="text-sm text-gray-600">{methodInfo.label}</span>
                       </div>
-                      <span className="text-sm font-medium text-gray-900">
-                        {formatCurrency(method.total)}
-                      </span>
+                      <div className="text-right">
+                        <span className="text-sm font-medium text-gray-900">
+                          {formatCurrency(method.total)}
+                        </span>
+                        <span className="text-xs text-gray-500 ml-2">
+                          ({method.count})
+                        </span>
+                      </div>
                     </div>
                   );
                 })}
@@ -390,7 +489,6 @@ const Fees = () => {
             onViewStudent={handleViewStudentFees}
             onViewCourse={handleViewCourseFees}
             onRecordPayment={(student) => {
-              // Navigate to record payment with student pre-selected
               const params = new URLSearchParams();
               params.append('studentId', student.studentId);
               navigate(`/fees/record-payment?${params.toString()}`);

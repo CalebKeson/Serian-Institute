@@ -1,9 +1,11 @@
-// src/pages/Auth/Register.jsx - OPTIMIZED WITH LOGO AND COMPACT DESIGN
+// src/pages/Auth/Register.jsx - REDESIGNED TO MATCH LOGIN PAGE
+
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuthStore } from '../../stores/authStore';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
-import { Mail, Lock, Eye, EyeOff, User, UserPlus, LogIn } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, User, UserPlus, Sparkles, ArrowLeft } from 'lucide-react';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
 const Register = () => {
@@ -25,23 +27,21 @@ const Register = () => {
   const { signInWithGoogle, loading: googleLoading } = useGoogleAuth();
   const navigate = useNavigate();
 
-  // Serian Institute Logo URL
-  const LOGO_URL = "https://serianinstitute.ac.ke/wp-content/uploads/2025/02/Picture2-removebg-preview.png";
+  // Dynamically get current year
+  const currentYear = new Date().getFullYear();
+
+  // Beautiful Unsplash image - Same as login page
+  const IMAGE_URL = "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80";
+  const LOGO_URL = "/images/logo.png";
 
   // Check form validity whenever formData changes
   useEffect(() => {
-    const { name, email, password, confirmPassword, role } = formData;
+    const { name, email, password, confirmPassword } = formData;
     
-    // Check if all required fields are filled
-    const allFieldsFilled = name && email && password && confirmPassword && role;
-    
-    // Check password requirements
+    const allFieldsFilled = name && email && password && confirmPassword;
     const isPasswordValid = password.length >= 6;
-    
-    // Check if passwords match
     const passwordsMatch = password === confirmPassword;
     
-    // Set password error
     if (password && confirmPassword && !passwordsMatch) {
       setPasswordError('Passwords do not match');
     } else if (password && !isPasswordValid) {
@@ -50,7 +50,6 @@ const Register = () => {
       setPasswordError('');
     }
     
-    // Final form validation
     const isValid = allFieldsFilled && isPasswordValid && passwordsMatch;
     setIsFormValid(isValid);
   }, [formData]);
@@ -63,23 +62,14 @@ const Register = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    setFormData({ ...formData, [name]: value });
   };
 
-  const togglePasswordVisibility = () => {
-    setShowPassword(!showPassword);
-  };
-
-  const toggleConfirmPasswordVisibility = () => {
-    setShowConfirmPassword(!showConfirmPassword);
-  };
+  const togglePasswordVisibility = () => setShowPassword(!showPassword);
+  const toggleConfirmPasswordVisibility = () => setShowConfirmPassword(!showConfirmPassword);
 
   const handleGoogleSignUp = async () => {
     const result = await signInWithGoogle();
-    
     if (result.success) {
       toast.success('Account created with Google successfully!');
       navigate('/dashboard');
@@ -116,279 +106,284 @@ const Register = () => {
     }
   };
 
-  const handleLogoError = () => {
-    setLogoError(true);
+  const handleLogoError = () => setLogoError(true);
+
+  // Animation variants (matching login page)
+  const containerVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.5,
+        when: "beforeChildren",
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { y: 15, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      transition: { duration: 0.4, ease: "easeOut" }
+    }
+  };
+
+  const imageVariants = {
+    hidden: { x: -30, opacity: 0, scale: 0.98 },
+    visible: {
+      x: 0,
+      opacity: 1,
+      scale: 1,
+      transition: { duration: 0.6, ease: "easeOut" }
+    }
+  };
+
+  const formVariants = {
+    hidden: { x: 30, opacity: 0 },
+    visible: {
+      x: 0,
+      opacity: 1,
+      transition: { duration: 0.6, ease: "easeOut", delay: 0.15 }
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-3 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="w-full max-w-sm bg-white rounded-lg shadow-md overflow-hidden">
-        {/* Top bar */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 h-1 w-full"></div>
-
-        <div className="px-5 py-5">
-          {/* Logo and Title - With Serian Institute Logo */}
-          <div className="text-center mb-4">
-            {/* Logo Image with Fallback */}
-            <div className="mx-auto mb-3">
-              {!logoError ? (
-                <img
-                  src={LOGO_URL}
-                  alt="Serian Institute Logo"
-                  className="h-16 w-auto mx-auto object-contain"
-                  onError={handleLogoError}
-                />
-              ) : (
-                /* Fallback to text logo if image fails to load */
-                <div className="mx-auto h-10 w-10 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">SI</span>
-                </div>
-              )}
-            </div>
-            <h1 className="text-lg font-bold text-gray-800">
-              Join Serian Institute
-            </h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Create your account to get started
-            </p>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-100">
+      {/* Main Card Container */}
+      <motion.div 
+        initial="hidden"
+        animate="visible"
+        variants={containerVariants}
+        className="w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden bg-white flex flex-col md:flex-row"
+      >
+        {/* LEFT SIDE - IMAGE with overlay text */}
+        <motion.div 
+          variants={imageVariants}
+          className="hidden md:block md:w-1/2 relative overflow-hidden min-h-[550px]"
+        >
+          <div className="absolute inset-0 bg-gradient-to-tr from-black/40 via-black/20 to-transparent z-10"></div>
+          <img 
+            src={IMAGE_URL} 
+            alt="Campus" 
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 hover:scale-105"
+          />
+          <div className="absolute bottom-6 left-6 right-6 z-20 text-white">
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.5 }}
+            >
+              <Sparkles className="w-5 h-5 mb-2 text-yellow-300" />
+              <p className="text-sm font-semibold leading-tight">
+                "Start your journey towards excellence today."
+              </p>
+              <p className="text-xs text-white/80 mt-1">Join our learning community</p>
+            </motion.div>
           </div>
+        </motion.div>
 
-          {/* Google Sign Up Button */}
-          <button
-            className="flex items-center justify-center gap-2 w-full py-2 mb-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        {/* RIGHT SIDE - REGISTRATION FORM */}
+        <motion.div 
+          variants={formVariants}
+          className="w-full md:w-1/2 p-5 sm:p-6 flex flex-col justify-center"
+        >
+          {/* Logo */}
+          <motion.div variants={itemVariants} className="flex justify-center mb-3">
+            {!logoError ? (
+              <img
+                src={LOGO_URL}
+                alt="SBTC Logo"
+                className="h-12 w-auto object-contain"
+                onError={handleLogoError}
+              />
+            ) : (
+              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-sky-500 rounded-xl flex items-center justify-center shadow-md">
+                <span className="text-white font-bold text-lg">S</span>
+              </div>
+            )}
+          </motion.div>
+
+          {/* Form Title */}
+          <motion.div variants={itemVariants} className="text-center mb-4">
+            <h1 className="text-xl font-bold text-gray-800">Create Account</h1>
+            <p className="text-gray-500 text-xs mt-0.5">Join Serian Institute today</p>
+          </motion.div>
+
+          {/* Google Sign Up */}
+          <motion.button
+            variants={itemVariants}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
             onClick={handleGoogleSignUp}
             disabled={googleLoading || isSubmitting}
+            className="w-full py-2 mb-3 flex items-center justify-center gap-2 border border-gray-200 rounded-lg hover:border-indigo-300 hover:shadow-sm transition-all duration-200 text-xs font-medium text-gray-700 bg-white"
           >
             {googleLoading ? (
-              <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-blue-600"></div>
+              <div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
             ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
             )}
-            <span className="text-gray-700 text-xs font-medium">
-              {googleLoading ? 'Creating account...' : 'Sign up with Google'}
-            </span>
-          </button>
+            <span>Continue with Google</span>
+          </motion.button>
 
           {/* Divider */}
-          <div className="relative flex items-center justify-center mb-4">
-            <div className="border-t border-gray-200 w-full"></div>
-            <span className="bg-white px-2 text-gray-400 text-xs">
-              OR
-            </span>
-            <div className="border-t border-gray-200 w-full"></div>
-          </div>
+          <motion.div variants={itemVariants} className="relative my-3">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
+            <div className="relative flex justify-center text-[10px]"><span className="px-2 bg-white text-gray-400">OR</span></div>
+          </motion.div>
 
           {/* Registration Form */}
-          <form onSubmit={onFinish} className="space-y-3">
-            {/* Full Name Field */}
+          <motion.form variants={itemVariants} onSubmit={onFinish} className="space-y-3">
+            {/* Full Name */}
             <div>
-              <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
-                Full Name
-              </label>
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">Full Name</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                  <User className="h-3.5 w-3.5 text-gray-400" />
-                </div>
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
-                  id="name"
-                  name="name"
                   type="text"
-                  required
+                  name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  className="block w-full pl-8 pr-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter your full name"
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
+                  placeholder="John Doe"
+                  required
                 />
               </div>
             </div>
 
-            {/* Email Field */}
+            {/* Email */}
             <div>
-              <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">
-                Email Address
-              </label>
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">Email Address</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                  <Mail className="h-3.5 w-3.5 text-gray-400" />
-                </div>
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
-                  id="email"
-                  name="email"
                   type="email"
-                  required
+                  name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className="block w-full pl-8 pr-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="your@email.com"
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
+                  placeholder="you@example.com"
+                  required
                 />
               </div>
             </div>
 
             {/* Role Selection */}
             <div>
-              <label htmlFor="role" className="block text-xs font-medium text-gray-700 mb-1">
-                I am a
-              </label>
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">I am a</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                  <UserPlus className="h-3.5 w-3.5 text-gray-400" />
-                </div>
+                <UserPlus className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <select
-                  id="role"
                   name="role"
                   value={formData.role}
                   onChange={handleChange}
-                  className="block w-full pl-8 pr-8 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white"
+                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none appearance-none bg-white"
                 >
                   <option value="student">Student</option>
                   <option value="parent">Parent</option>
                   <option value="teacher">Teacher</option>
                   <option value="admin">Administrator</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
-                  <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                  <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </div>
               </div>
             </div>
 
-            {/* Password Field */}
+            {/* Password */}
             <div>
-              <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
-                Password
-              </label>
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">Password</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                  <Lock className="h-3.5 w-3.5 text-gray-400" />
-                </div>
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
-                  id="password"
+                  type={showPassword ? "text" : "password"}
                   name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
                   value={formData.password}
                   onChange={handleChange}
-                  className="block w-full pl-8 pr-8 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
                   placeholder="Create password (min. 6 characters)"
                   minLength={6}
+                  required
                 />
                 <button
                   type="button"
                   onClick={togglePasswordVisibility}
-                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600"
+                  className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-indigo-500 transition-colors"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-3.5 w-3.5" />
-                  ) : (
-                    <Eye className="h-3.5 w-3.5" />
-                  )}
+                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </div>
 
-            {/* Confirm Password Field */}
+            {/* Confirm Password */}
             <div>
-              <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">
-                Confirm Password
-              </label>
+              <label className="block text-xs font-medium text-gray-700 mb-0.5">Confirm Password</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                  <Lock className="h-3.5 w-3.5 text-gray-400" />
-                </div>
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
-                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
                   name="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  required
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="block w-full pl-8 pr-8 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
                   placeholder="Confirm your password"
+                  required
                 />
                 <button
                   type="button"
                   onClick={toggleConfirmPasswordVisibility}
-                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600"
+                  className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-indigo-500 transition-colors"
                 >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-3.5 w-3.5" />
-                  ) : (
-                    <Eye className="h-3.5 w-3.5" />
-                  )}
+                  {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
-              {/* Password error message */}
               {passwordError && (
-                <p className="mt-1 text-xs text-red-600">
-                  {passwordError}
-                </p>
+                <p className="mt-1 text-xs text-red-600">{passwordError}</p>
               )}
             </div>
 
-            {/* Submit Button */}
-            <button
+            {/* Register Button */}
+            <motion.button
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={!isFormValid || isSubmitting || googleLoading}
-              className="w-full h-8 rounded-md text-sm font-medium flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                  Creating account...
-                </>
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
               ) : (
-                <>
-                  <UserPlus className="h-3.5 w-3.5" />
-                  Create Account
-                </>
+                <><UserPlus className="w-3.5 h-3.5" /> Create Account</>
               )}
-            </button>
+            </motion.button>
+          </motion.form>
 
-            {/* Login Link */}
-            <div className="text-center pt-1">
-              <span className="text-xs text-gray-500">
-                Already have an account?{" "}
-                <Link
-                  to="/login"
-                  className="text-blue-600 font-medium hover:underline"
-                >
-                  Sign in here
-                </Link>
-              </span>
-            </div>
-          </form>
-        </div>
+          {/* Login Link */}
+          <motion.div variants={itemVariants} className="mt-4 text-center">
+            <p className="text-xs text-gray-500">
+              Already have an account?{' '}
+              <Link to="/login" className="text-indigo-600 hover:text-indigo-700 font-medium hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </motion.div>
 
-        {/* Footer - Copyright */}
-        <div className="border-t border-gray-100 px-5 py-3">
-          <p className="text-center text-xs text-gray-400">
-            © 2026 Serian Institute. All rights reserved.
-          </p>
-        </div>
-      </div>
+          {/* Footer with Dynamic Year */}
+          <motion.p variants={itemVariants} className="text-center text-[10px] text-gray-400 mt-5">
+            By creating an account, you agree to our Terms of Service and Privacy Policy.
+          </motion.p>
+        </motion.div>
+      </motion.div>
     </div>
   );
 };

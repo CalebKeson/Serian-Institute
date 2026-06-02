@@ -1,4 +1,5 @@
-// src/pages/Courses/CourseDetails.jsx - UPDATED WITH CNA
+// src/pages/Courses/CourseDetails.jsx - COMPLETE FIXED VERSION
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router';
 import {
@@ -33,7 +34,7 @@ import {
   Wrench,
   Award as GradeIcon,
   DollarSign,
-  HeartPulse // ADD THIS for CNA
+  HeartPulse
 } from 'lucide-react';
 import Layout from '../../components/Layout/Layout';
 import { useCourseStore } from '../../stores/courseStore';
@@ -241,7 +242,6 @@ const CourseDetails = () => {
     return configs[status] || configs.inactive;
   };
 
-  // UPDATED: Added CNA to course type config
   const getCourseTypeConfig = (courseType) => {
     const configs = {
       driving: {
@@ -276,7 +276,7 @@ const CourseDetails = () => {
         iconColor: 'text-purple-600',
         borderColor: 'border-purple-200'
       },
-      cna: { // ADDED for nursing
+      cna: {
         color: 'bg-pink-100 text-pink-800',
         icon: HeartPulse,
         label: 'Certified Nursing Assistant',
@@ -295,7 +295,6 @@ const CourseDetails = () => {
     };
   };
 
-  // UPDATED: Added CNA certifications
   const getCertificationConfig = (certification) => {
     const configs = {
       'NTSA License': { 
@@ -318,17 +317,17 @@ const CourseDetails = () => {
         icon: Award,
         bgColor: 'bg-gray-50'
       },
-      'CNA Certification': { // ADDED
+      'CNA Certification': {
         color: 'bg-pink-100 text-pink-800',
         icon: Award,
         bgColor: 'bg-pink-50'
       },
-      'NCLEX Preparation': { // ADDED
+      'NCLEX Preparation': {
         color: 'bg-indigo-100 text-indigo-800',
         icon: Award,
         bgColor: 'bg-indigo-50'
       },
-      'State Board Approved': { // ADDED
+      'State Board Approved': {
         color: 'bg-teal-100 text-teal-800',
         icon: Shield,
         bgColor: 'bg-teal-50'
@@ -337,8 +336,10 @@ const CourseDetails = () => {
     return configs[certification] || configs['Other'];
   };
 
+  // FIXED: Get enrollment status with array check
   const getEnrollmentStatus = () => {
-    const enrolledCount = courseEnrollments?.length || 0;
+    const enrollments = Array.isArray(courseEnrollments) ? courseEnrollments : [];
+    const enrolledCount = enrollments.length;
     const maxStudents = currentCourse?.maxStudents || 1;
     const percentage = maxStudents > 0 ? (enrolledCount / maxStudents) * 100 : 0;
 
@@ -377,8 +378,9 @@ const CourseDetails = () => {
     }
   };
 
-  // Calculate statistics
-  const enrolledCount = courseEnrollments?.length || 0;
+  // Calculate statistics with array check
+  const enrollmentsArray = Array.isArray(courseEnrollments) ? courseEnrollments : [];
+  const enrolledCount = enrollmentsArray.length;
   const maxStudents = currentCourse?.maxStudents || 1;
   const availableSpots = Math.max(0, maxStudents - enrolledCount);
   const enrollmentPercentage = maxStudents > 0 ? Math.min(100, Math.round((enrolledCount / maxStudents) * 100)) : 0;
@@ -560,7 +562,7 @@ const CourseDetails = () => {
           </nav>
         </div>
 
-        {/* Tab Content - Only showing the Overview tab changes for CNA */}
+        {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Column - Course Info (2/3 width) */}
@@ -590,7 +592,6 @@ const CourseDetails = () => {
                     </div>
                   )}
 
-                  {/* NEW: Course Breakdown Display */}
                   {currentCourse?.courseBreakdown && (
                     <div className="mt-6">
                       <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
@@ -603,7 +604,6 @@ const CourseDetails = () => {
                     </div>
                   )}
 
-                  {/* NEW: Additional Notes */}
                   {currentCourse?.notes && (
                     <div className="mt-6">
                       <h3 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
@@ -713,7 +713,7 @@ const CourseDetails = () => {
 
             {/* Right Column - Sidebar (1/3 width) */}
             <div className="space-y-6">
-              {/* Course Type Card - UPDATED with CNA */}
+              {/* Course Type Card */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -754,7 +754,7 @@ const CourseDetails = () => {
                 </div>
               </div>
 
-              {/* Workshop/Skills Lab Info - UPDATED with both flags */}
+              {/* Workshop/Skills Lab Info */}
               {(currentCourse?.workshopRequired || currentCourse?.skillsLabRequired) && (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                   <h4 className="text-sm font-medium text-blue-800 mb-2 flex items-center">
@@ -928,7 +928,7 @@ const CourseDetails = () => {
                 </div>
               )}
 
-              {/* Recent Enrollments Card */}
+              {/* Recent Enrollments Card - FIXED with array check */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
                   <div className="flex items-center justify-between">
@@ -950,9 +950,9 @@ const CourseDetails = () => {
                     <div className="flex justify-center py-4">
                       <Loader className="w-6 h-6 animate-spin text-purple-600" />
                     </div>
-                  ) : courseEnrollments?.length > 0 ? (
+                  ) : enrollmentsArray.length > 0 ? (
                     <div className="space-y-4">
-                      {courseEnrollments.slice(0, 3).map((enrollment) => (
+                      {enrollmentsArray.slice(0, 3).map((enrollment) => (
                         <div key={enrollment._id} className="flex items-center space-x-3">
                           <div className="h-8 w-8 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center flex-shrink-0">
                             <span className="text-white font-medium text-xs">
@@ -966,6 +966,11 @@ const CourseDetails = () => {
                             <p className="text-xs text-gray-500">
                               Enrolled {formatDate(enrollment.enrollmentDate)}
                             </p>
+                            {enrollment.admissionNumber && (
+                              <p className="text-xs text-purple-600 font-mono mt-0.5">
+                                ID: {enrollment.admissionNumber}
+                              </p>
+                            )}
                           </div>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                             enrollment.status === 'enrolled' ? 'bg-green-100 text-green-800' :
@@ -1025,10 +1030,9 @@ const CourseDetails = () => {
           </div>
         )}
 
-        {/* Grades Tab - Keep existing */}
+        {/* Grades Tab */}
         {activeTab === 'grades' && (
           <div className="space-y-6">
-            {/* Grades Header */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -1068,15 +1072,16 @@ const CourseDetails = () => {
           </div>
         )}
 
+        {/* Statistics Tab */}
         {activeTab === 'statistics' && (
           <div className="space-y-6">
             <GradeStatistics courseId={id} view="course" />
           </div>
         )}
 
+        {/* Fees Tab */}
         {activeTab === 'fees' && (
           <div className="space-y-6">
-            {/* Fee Overview Card */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -1100,7 +1105,6 @@ const CourseDetails = () => {
               </div>
             </div>
 
-            {/* Fee Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <p className="text-sm text-gray-600 mb-2">Course Price</p>
@@ -1131,7 +1135,6 @@ const CourseDetails = () => {
               </div>
             </div>
 
-            {/* Collection Progress Bar */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-gray-700">
@@ -1155,7 +1158,6 @@ const CourseDetails = () => {
               </div>
             </div>
 
-            {/* Quick Info */}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
               <div className="flex items-start">
                 <DollarSign className="w-5 h-5 text-blue-600 mt-0.5 mr-3" />
@@ -1188,7 +1190,7 @@ const CourseDetails = () => {
         onSave={handleSaveGrade}
         grade={editingGrade}
         courseId={id}
-        students={courseEnrollments.map(e => e.student)}
+        students={enrollmentsArray.map(e => e.student)}
         loading={gradesLoading}
       />
     </Layout>

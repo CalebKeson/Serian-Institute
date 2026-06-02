@@ -7,7 +7,7 @@ const courseSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     uppercase: true,
-    match: [/^[A-Z]{3,4}\d{3}$/, 'Please enter a valid course code (e.g., CNA101, DRV101, PLB201, ELC301, COM401)']
+    match: [/^[A-Z]{3,4}$/, 'Please enter a valid course code (e.g., CNA, DRV, PLB, ELC, COM)']
   },
   name: {
     type: String,
@@ -144,28 +144,7 @@ const courseSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Auto-generate course code based on course type
-courseSchema.pre('save', async function(next) {
-  if (this.isNew) {
-    try {
-      const typePrefixes = {
-        driving: 'DRV',
-        plumbing: 'PLB',
-        electrical: 'ELC',
-        computer: 'COM',
-        cna: 'CNA'
-      };
-      
-      const prefix = typePrefixes[this.courseType] || 'CRS';
-      const count = await mongoose.model('Course').countDocuments({ courseType: this.courseType });
-      
-      this.courseCode = `${prefix}${String(count + 1).padStart(3, '0')}`;
-    } catch (error) {
-      next(error);
-    }
-  }
-  next();
-});
+// REMOVED: The pre('save') middleware that auto-generated courseCode
 
 // Indexes
 courseSchema.index({ instructor: 1 });
@@ -173,6 +152,7 @@ courseSchema.index({ courseType: 1 });
 courseSchema.index({ intakeMonth: 1 });
 courseSchema.index({ status: 1 });
 courseSchema.index({ price: 1 });
+courseSchema.index({ courseCode: 1 }); // Added index for courseCode
 
 // Virtual for enrolled students count
 courseSchema.virtual('enrolledCount').get(function() {

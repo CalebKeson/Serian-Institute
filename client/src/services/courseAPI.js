@@ -1,4 +1,3 @@
-// src/services/courseAPI.js - UPDATED with payment methods
 import api from './api';
 
 export const courseAPI = {
@@ -37,13 +36,37 @@ export const courseAPI = {
     return api.get(`/courses/${id}`);
   },
 
-  // Create new course
+  // Create new course (manual course code required)
   createCourse: (courseData) => {
+    // Validate course code format before sending
+    const courseCodeRegex = /^[A-Z]{3,4}$/;
+    if (!courseCodeRegex.test(courseData.courseCode?.toUpperCase())) {
+      return Promise.reject({ 
+        response: { 
+          data: { 
+            message: 'Course code must be 3-4 uppercase letters (e.g., CNA, DRV, PLB, ELC, COM)' 
+          } 
+        } 
+      });
+    }
     return api.post('/courses', courseData);
   },
 
   // Update course
   updateCourse: (id, courseData) => {
+    // Validate course code format if being updated
+    if (courseData.courseCode) {
+      const courseCodeRegex = /^[A-Z]{3,4}$/;
+      if (!courseCodeRegex.test(courseData.courseCode.toUpperCase())) {
+        return Promise.reject({ 
+          response: { 
+            data: { 
+              message: 'Course code must be 3-4 uppercase letters (e.g., CNA, DRV, PLB, ELC, COM)' 
+            } 
+          } 
+        });
+      }
+    }
     return api.put(`/courses/${id}`, courseData);
   },
 
@@ -52,12 +75,12 @@ export const courseAPI = {
     return api.delete(`/courses/${id}`);
   },
 
-  // Enroll student in course
+  // Enroll student in course (legacy - use enrollmentAPI instead)
   enrollStudent: (courseId, studentId) => {
     return api.post(`/courses/${courseId}/enroll`, { studentId });
   },
 
-  // Remove student from course
+  // Remove student from course (legacy - use enrollmentAPI instead)
   removeStudent: (courseId, studentId) => {
     return api.delete(`/courses/${courseId}/enroll`, { data: { studentId } });
   },
@@ -77,7 +100,7 @@ export const courseAPI = {
     return api.get('/courses/stats/overview');
   },
 
-  // ============= NEW PAYMENT-RELATED METHODS =============
+  // ============= PAYMENT-RELATED METHODS =============
   
   // Get course payment summary
   getCoursePaymentSummary: (courseId) => {
@@ -104,6 +127,22 @@ export const courseAPI = {
       params: { format },
       responseType: 'blob' 
     });
+  },
+
+  // NEW: Validate course code uniqueness
+  validateCourseCode: async (courseCode, excludeId = null) => {
+    try {
+      const response = await api.get('/courses', { 
+        params: { search: courseCode, limit: 1 } 
+      });
+      const existing = response.data.data?.find(c => c.courseCode === courseCode.toUpperCase());
+      if (existing && existing._id !== excludeId) {
+        return { valid: false, message: 'Course code already exists' };
+      }
+      return { valid: true };
+    } catch (error) {
+      return { valid: true }; // Assume valid if check fails
+    }
   }
 };
 

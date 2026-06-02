@@ -24,7 +24,7 @@ export const useCourseStore = create((set, get) => ({
     limit: 10
   },
 
-  // ============= NEW PAYMENT-RELATED STATE =============
+  // Payment-related state
   coursePaymentSummary: null,
   courseStudentsPaymentStatus: [],
   studentCoursePayments: null,
@@ -92,7 +92,7 @@ export const useCourseStore = create((set, get) => ({
       if (document.visibilityState === 'visible') {
         get().fetchCourseCount();
       }
-    }, 60000); // 60 seconds
+    }, 60000);
     
     set({ pollingInterval: interval });
     get().fetchCourseCount();
@@ -126,8 +126,18 @@ export const useCourseStore = create((set, get) => ({
     }
   },
 
+  // Create course with manual course code validation
   createCourse: async (courseData) => {
     set({ loading: true, error: null });
+    
+    // Validate course code format
+    const courseCodeRegex = /^[A-Z]{3,4}$/;
+    if (!courseCodeRegex.test(courseData.courseCode?.toUpperCase())) {
+      const errorMessage = 'Course code must be 3-4 uppercase letters (e.g., CNA, DRV, PLB, ELC, COM)';
+      set({ error: errorMessage, loading: false });
+      toast.error(errorMessage);
+      return { success: false, message: errorMessage };
+    }
     
     try {
       const response = await courseAPI.createCourse(courseData);
@@ -158,6 +168,17 @@ export const useCourseStore = create((set, get) => ({
 
   updateCourse: async (id, courseData) => {
     set({ loading: true, error: null });
+    
+    // Validate course code format if being updated
+    if (courseData.courseCode) {
+      const courseCodeRegex = /^[A-Z]{3,4}$/;
+      if (!courseCodeRegex.test(courseData.courseCode.toUpperCase())) {
+        const errorMessage = 'Course code must be 3-4 uppercase letters (e.g., CNA, DRV, PLB, ELC, COM)';
+        set({ error: errorMessage, loading: false });
+        toast.error(errorMessage);
+        return { success: false, message: errorMessage };
+      }
+    }
     
     try {
       const response = await courseAPI.updateCourse(id, courseData);
@@ -217,9 +238,7 @@ export const useCourseStore = create((set, get) => ({
     }
   },
 
-  // ============= NEW PAYMENT-RELATED METHODS =============
-
-  // Fetch course payment summary
+  // Payment-related methods
   fetchCoursePaymentSummary: async (courseId) => {
     set({ coursePaymentLoading: true, coursePaymentError: null });
     
@@ -240,7 +259,6 @@ export const useCourseStore = create((set, get) => ({
     }
   },
 
-  // Fetch students payment status for a course
   fetchCourseStudentsPaymentStatus: async (courseId, params = {}) => {
     set({ coursePaymentLoading: true, coursePaymentError: null });
     
@@ -249,7 +267,7 @@ export const useCourseStore = create((set, get) => ({
       
       set({
         courseStudentsPaymentStatus: response.data.data.students || [],
-        coursePaymentSummary: response.data.data.summary, // Update summary with latest
+        coursePaymentSummary: response.data.data.summary,
         coursePaymentLoading: false
       });
       
@@ -262,7 +280,6 @@ export const useCourseStore = create((set, get) => ({
     }
   },
 
-  // Fetch specific student's payments in a course
   fetchStudentCoursePayments: async (courseId, studentId) => {
     set({ coursePaymentLoading: true, coursePaymentError: null });
     
@@ -283,14 +300,12 @@ export const useCourseStore = create((set, get) => ({
     }
   },
 
-  // Export course payment report
   exportCoursePaymentReport: async (courseId, params = {}) => {
     set({ coursePaymentLoading: true, coursePaymentError: null });
     
     try {
       const response = await courseAPI.exportCoursePaymentReport(courseId, params);
       
-      // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -310,7 +325,6 @@ export const useCourseStore = create((set, get) => ({
     }
   },
 
-  // Get payment statistics for current course
   getCoursePaymentStats: () => {
     const { courseStudentsPaymentStatus } = get();
     
@@ -328,11 +342,11 @@ export const useCourseStore = create((set, get) => ({
     
     const stats = {
       totalStudents: courseStudentsPaymentStatus.length,
-      paidCount: courseStudentsPaymentStatus.filter(s => s.financials?.status === 'paid').length,
-      partialCount: courseStudentsPaymentStatus.filter(s => s.financials?.status === 'partial').length,
-      unpaidCount: courseStudentsPaymentStatus.filter(s => s.financials?.status === 'unpaid').length,
-      totalCollected: courseStudentsPaymentStatus.reduce((sum, s) => sum + (s.financials?.totalPaid || 0), 0),
-      totalExpected: courseStudentsPaymentStatus.reduce((sum, s) => sum + (s.financials?.coursePrice || 0), 0)
+      paidCount: courseStudentsPaymentStatus.filter(s => s.payment?.status === 'paid').length,
+      partialCount: courseStudentsPaymentStatus.filter(s => s.payment?.status === 'partial').length,
+      unpaidCount: courseStudentsPaymentStatus.filter(s => s.payment?.status === 'unpaid').length,
+      totalCollected: courseStudentsPaymentStatus.reduce((sum, s) => sum + (s.payment?.totalPaid || 0), 0),
+      totalExpected: courseStudentsPaymentStatus.reduce((sum, s) => sum + (s.coursePrice || 0), 0)
     };
     
     stats.collectionRate = stats.totalExpected > 0 
@@ -342,7 +356,6 @@ export const useCourseStore = create((set, get) => ({
     return stats;
   },
 
-  // Get students by payment status
   getStudentsByPaymentStatus: (status) => {
     const { courseStudentsPaymentStatus } = get();
     
@@ -350,10 +363,9 @@ export const useCourseStore = create((set, get) => ({
       return [];
     }
     
-    return courseStudentsPaymentStatus.filter(s => s.financials?.status === status);
+    return courseStudentsPaymentStatus.filter(s => s.payment?.status === status);
   },
 
-  // Get payment method breakdown for course
   getCoursePaymentMethodBreakdown: () => {
     const { coursePaymentSummary } = get();
     
@@ -364,7 +376,6 @@ export const useCourseStore = create((set, get) => ({
     return coursePaymentSummary.paymentMethods;
   },
 
-  // Get monthly collection trend
   getMonthlyCollectionTrend: () => {
     const { coursePaymentSummary } = get();
     
@@ -375,7 +386,6 @@ export const useCourseStore = create((set, get) => ({
     return coursePaymentSummary.monthlyTrend;
   },
 
-  // Clear course payment data
   clearCoursePaymentData: () => {
     set({
       coursePaymentSummary: null,
@@ -402,7 +412,12 @@ export const useCourseStore = create((set, get) => ({
     set({ currentCourse: null });
   },
 
-  // Reset all course-related data
+  // Validate course code uniqueness
+  validateCourseCode: async (courseCode, excludeId = null) => {
+    const result = await courseAPI.validateCourseCode(courseCode, excludeId);
+    return result;
+  },
+
   resetCourseStore: () => {
     set({
       courses: [],

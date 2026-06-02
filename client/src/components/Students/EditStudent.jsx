@@ -1,4 +1,5 @@
-// src/pages/Students/EditStudent.jsx
+// src/pages/Students/EditStudent.jsx - COMPLETE
+
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { formatStudentForAPI, formatStudentForForm } from '../../utils/studentDataFormatter';
@@ -14,6 +15,7 @@ import {
   AlertCircle,
   Mail,
   Loader,
+  Hash
 } from "lucide-react";
 import Layout from "../../components/Layout/Layout";
 import { useStudentStore } from "../../stores/studentStore";
@@ -55,13 +57,11 @@ const EditStudent = () => {
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Check if user is admin
   if (user?.role !== "admin") {
     navigate("/students");
     return null;
   }
 
-  // Fetch student data when component mounts
   useEffect(() => {
     if (id) {
       fetchStudent(id);
@@ -72,7 +72,6 @@ const EditStudent = () => {
     };
   }, [id]);
 
-  // Update useEffect that populates form:
   useEffect(() => {
     if (currentStudent) {
       const formattedData = formatStudentForForm({
@@ -89,7 +88,74 @@ const EditStudent = () => {
     }
   }, [currentStudent]);
 
-  // Update handleSubmit:
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    if (name.startsWith("address.")) {
+      const field = name.split(".")[1];
+      setFormData((prev) => ({
+        ...prev,
+        address: {
+          ...prev.address,
+          [field]: value,
+        },
+      }));
+    } else if (name.startsWith("emergencyContact.")) {
+      const field = name.split(".")[1];
+      setFormData((prev) => ({
+        ...prev,
+        emergencyContact: {
+          ...prev.emergencyContact,
+          [field]: value,
+        },
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+
+    if (errors[name]) {
+      setErrors((prev) => ({
+        ...prev,
+        [name]: "",
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.name.trim()) newErrors.name = "Full name is required";
+    if (!formData.email.trim()) newErrors.email = "Email is required";
+    if (!formData.dateOfBirth) newErrors.dateOfBirth = "Date of birth is required";
+    if (!formData.gender) newErrors.gender = "Gender is required";
+    if (!formData.phone.trim()) newErrors.phone = "Phone number is required";
+    if (!formData.address.street.trim()) newErrors["address.street"] = "Street address is required";
+    if (!formData.address.city.trim()) newErrors["address.city"] = "City is required";
+    if (!formData.address.state.trim()) newErrors["address.state"] = "State is required";
+    if (!formData.address.zipCode.trim()) newErrors["address.zipCode"] = "Zip code is required";
+    if (!formData.emergencyContact.name.trim()) newErrors["emergencyContact.name"] = "Emergency contact name is required";
+    if (!formData.emergencyContact.relationship.trim()) newErrors["emergencyContact.relationship"] = "Relationship is required";
+    if (!formData.emergencyContact.phone.trim()) newErrors["emergencyContact.phone"] = "Emergency contact phone is required";
+
+    if (formData.email && !/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+
+    if (formData.phone && !/^\d{10}$/.test(formData.phone.replace(/\D/g, ""))) {
+      newErrors.phone = "Please enter a valid 10-digit phone number";
+    }
+
+    if (formData.emergencyContact.phone && !/^\d{10}$/.test(formData.emergencyContact.phone.replace(/\D/g, ""))) {
+      newErrors["emergencyContact.phone"] = "Please enter a valid 10-digit phone number";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -118,95 +184,6 @@ const EditStudent = () => {
     }
   };
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    // Handle nested objects (address, emergencyContact)
-    if (name.startsWith("address.")) {
-      const field = name.split(".")[1];
-      setFormData((prev) => ({
-        ...prev,
-        address: {
-          ...prev.address,
-          [field]: value,
-        },
-      }));
-    } else if (name.startsWith("emergencyContact.")) {
-      const field = name.split(".")[1];
-      setFormData((prev) => ({
-        ...prev,
-        emergencyContact: {
-          ...prev.emergencyContact,
-          [field]: value,
-        },
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    }
-
-    // Clear error when user starts typing
-    if (errors[name]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: "",
-      }));
-    }
-  };
-
-  const validateForm = () => {
-    const newErrors = {};
-
-    // Required fields validation
-    if (!formData.name.trim()) newErrors.name = "Full name is required";
-    if (!formData.email.trim()) newErrors.email = "Email is required";
-    if (!formData.dateOfBirth)
-      newErrors.dateOfBirth = "Date of birth is required";
-    if (!formData.gender) newErrors.gender = "Gender is required";
-    if (!formData.phone.trim()) newErrors.phone = "Phone number is required";
-    if (!formData.address.street.trim())
-      newErrors["address.street"] = "Street address is required";
-    if (!formData.address.city.trim())
-      newErrors["address.city"] = "City is required";
-    if (!formData.address.state.trim())
-      newErrors["address.state"] = "State is required";
-    if (!formData.address.zipCode.trim())
-      newErrors["address.zipCode"] = "Zip code is required";
-    if (!formData.emergencyContact.name.trim())
-      newErrors["emergencyContact.name"] = "Emergency contact name is required";
-    if (!formData.emergencyContact.relationship.trim())
-      newErrors["emergencyContact.relationship"] = "Relationship is required";
-    if (!formData.emergencyContact.phone.trim())
-      newErrors["emergencyContact.phone"] =
-        "Emergency contact phone is required";
-
-    // Email validation
-    if (
-      formData.email &&
-      !/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(formData.email)
-    ) {
-      newErrors.email = "Please enter a valid email address";
-    }
-
-    // Phone validation
-    if (formData.phone && !/^\d{10}$/.test(formData.phone.replace(/\D/g, ""))) {
-      newErrors.phone = "Please enter a valid 10-digit phone number";
-    }
-
-    if (
-      formData.emergencyContact.phone &&
-      !/^\d{10}$/.test(formData.emergencyContact.phone.replace(/\D/g, ""))
-    ) {
-      newErrors["emergencyContact.phone"] =
-        "Please enter a valid 10-digit phone number";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
   const handleCancel = () => {
     navigate("/students");
   };
@@ -226,12 +203,8 @@ const EditStudent = () => {
       <Layout>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">
-            Student not found
-          </h3>
-          <p className="mt-1 text-sm text-gray-500">
-            The student you're looking for doesn't exist.
-          </p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Student not found</h3>
+          <p className="mt-1 text-sm text-gray-500">The student you're looking for doesn't exist.</p>
           <button
             onClick={handleCancel}
             className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
@@ -246,7 +219,6 @@ const EditStudent = () => {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -265,16 +237,18 @@ const EditStudent = () => {
                   Update student information for {currentStudent?.user?.name}
                 </p>
                 {currentStudent?.studentId && (
-                  <p className="text-sm text-blue-600 font-medium">
-                    Student ID: {currentStudent.studentId}
-                  </p>
+                  <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-700 flex items-center">
+                      <Hash className="w-4 h-4 mr-2" />
+                      Student ID: <strong className="ml-1 font-mono">{currentStudent.studentId}</strong> (Auto-generated, cannot be edited)
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Form */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <form onSubmit={handleSubmit} className="p-6 space-y-8">
             {/* Personal Information Section */}
@@ -284,12 +258,8 @@ const EditStudent = () => {
                 Personal Information
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Full Name */}
                 <div>
-                  <label
-                    htmlFor="name"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
                     Full Name *
                   </label>
                   <input
@@ -311,12 +281,8 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* Email */}
                 <div>
-                  <label
-                    htmlFor="email"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                     Email Address *
                   </label>
                   <div className="relative">
@@ -341,12 +307,8 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* Date of Birth */}
                 <div>
-                  <label
-                    htmlFor="dateOfBirth"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2">
                     Date of Birth *
                   </label>
                   <div className="relative">
@@ -358,9 +320,7 @@ const EditStudent = () => {
                       value={formData.dateOfBirth}
                       onChange={handleChange}
                       className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                        errors.dateOfBirth
-                          ? "border-red-300"
-                          : "border-gray-300"
+                        errors.dateOfBirth ? "border-red-300" : "border-gray-300"
                       }`}
                     />
                   </div>
@@ -372,12 +332,8 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* Gender */}
                 <div>
-                  <label
-                    htmlFor="gender"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-2">
                     Gender *
                   </label>
                   <select
@@ -402,12 +358,8 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* Phone */}
                 <div>
-                  <label
-                    htmlFor="phone"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
                     Phone Number *
                   </label>
                   <div className="relative">
@@ -432,12 +384,9 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* Status */}
+                {/* Status - Student ID is NOT editable, only status can be changed */}
                 <div>
-                  <label
-                    htmlFor="status"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-2">
                     Status *
                   </label>
                   <select
@@ -463,12 +412,8 @@ const EditStudent = () => {
                 Address Information
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Street */}
                 <div className="md:col-span-2">
-                  <label
-                    htmlFor="address.street"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="address.street" className="block text-sm font-medium text-gray-700 mb-2">
                     Street Address *
                   </label>
                   <input
@@ -478,9 +423,7 @@ const EditStudent = () => {
                     value={formData.address.street}
                     onChange={handleChange}
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      errors["address.street"]
-                        ? "border-red-300"
-                        : "border-gray-300"
+                      errors["address.street"] ? "border-red-300" : "border-gray-300"
                     }`}
                     placeholder="Enter street address"
                   />
@@ -492,12 +435,8 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* City */}
                 <div>
-                  <label
-                    htmlFor="address.city"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="address.city" className="block text-sm font-medium text-gray-700 mb-2">
                     City *
                   </label>
                   <input
@@ -507,9 +446,7 @@ const EditStudent = () => {
                     value={formData.address.city}
                     onChange={handleChange}
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      errors["address.city"]
-                        ? "border-red-300"
-                        : "border-gray-300"
+                      errors["address.city"] ? "border-red-300" : "border-gray-300"
                     }`}
                     placeholder="Enter city"
                   />
@@ -521,12 +458,8 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* State */}
                 <div>
-                  <label
-                    htmlFor="address.state"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="address.state" className="block text-sm font-medium text-gray-700 mb-2">
                     State/Province *
                   </label>
                   <input
@@ -536,9 +469,7 @@ const EditStudent = () => {
                     value={formData.address.state}
                     onChange={handleChange}
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      errors["address.state"]
-                        ? "border-red-300"
-                        : "border-gray-300"
+                      errors["address.state"] ? "border-red-300" : "border-gray-300"
                     }`}
                     placeholder="Enter state or province"
                   />
@@ -550,12 +481,8 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* Zip Code */}
                 <div>
-                  <label
-                    htmlFor="address.zipCode"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="address.zipCode" className="block text-sm font-medium text-gray-700 mb-2">
                     ZIP/Postal Code *
                   </label>
                   <input
@@ -565,9 +492,7 @@ const EditStudent = () => {
                     value={formData.address.zipCode}
                     onChange={handleChange}
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      errors["address.zipCode"]
-                        ? "border-red-300"
-                        : "border-gray-300"
+                      errors["address.zipCode"] ? "border-red-300" : "border-gray-300"
                     }`}
                     placeholder="Enter ZIP code"
                   />
@@ -588,12 +513,8 @@ const EditStudent = () => {
                 Emergency Contact
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Emergency Contact Name */}
                 <div>
-                  <label
-                    htmlFor="emergencyContact.name"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="emergencyContact.name" className="block text-sm font-medium text-gray-700 mb-2">
                     Contact Name *
                   </label>
                   <input
@@ -603,9 +524,7 @@ const EditStudent = () => {
                     value={formData.emergencyContact.name}
                     onChange={handleChange}
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      errors["emergencyContact.name"]
-                        ? "border-red-300"
-                        : "border-gray-300"
+                      errors["emergencyContact.name"] ? "border-red-300" : "border-gray-300"
                     }`}
                     placeholder="Enter contact's full name"
                   />
@@ -617,12 +536,8 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* Relationship */}
                 <div>
-                  <label
-                    htmlFor="emergencyContact.relationship"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="emergencyContact.relationship" className="block text-sm font-medium text-gray-700 mb-2">
                     Relationship *
                   </label>
                   <input
@@ -632,9 +547,7 @@ const EditStudent = () => {
                     value={formData.emergencyContact.relationship}
                     onChange={handleChange}
                     className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      errors["emergencyContact.relationship"]
-                        ? "border-red-300"
-                        : "border-gray-300"
+                      errors["emergencyContact.relationship"] ? "border-red-300" : "border-gray-300"
                     }`}
                     placeholder="e.g., Mother, Father, Guardian"
                   />
@@ -646,12 +559,8 @@ const EditStudent = () => {
                   )}
                 </div>
 
-                {/* Emergency Contact Phone */}
                 <div className="md:col-span-2">
-                  <label
-                    htmlFor="emergencyContact.phone"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
+                  <label htmlFor="emergencyContact.phone" className="block text-sm font-medium text-gray-700 mb-2">
                     Contact Phone Number *
                   </label>
                   <div className="relative">
@@ -663,9 +572,7 @@ const EditStudent = () => {
                       value={formData.emergencyContact.phone}
                       onChange={handleChange}
                       className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                        errors["emergencyContact.phone"]
-                          ? "border-red-300"
-                          : "border-gray-300"
+                        errors["emergencyContact.phone"] ? "border-red-300" : "border-gray-300"
                       }`}
                       placeholder="0723456789"
                     />
@@ -696,9 +603,7 @@ const EditStudent = () => {
                 className="px-6 py-3 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md flex items-center"
               >
                 <Save className="w-4 h-4 mr-2" />
-                {isSubmitting || loading
-                  ? "Updating Student..."
-                  : "Update Student"}
+                {isSubmitting || loading ? "Updating Student..." : "Update Student"}
               </button>
             </div>
           </form>

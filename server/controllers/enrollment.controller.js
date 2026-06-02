@@ -5,8 +5,15 @@ import User from '../models/user.model.js';
 import { errorHandler } from '../utils/error.js';
 import mongoose from 'mongoose';
 import NotificationService from '../services/notificationService.js';
+import { 
+  generateAdmissionNumber, 
+  getStudentAdmissionNumbers,
+  hasAnyAdmissionNumber,
+  getCourseEnrollmentStats,
+  validateAdmissionNumber
+} from '../services/admissionNumberService.js';
 
-// @desc    Enroll student in course
+// @desc    Enroll student in course (with admission number generation)
 // @route   POST /api/enrollments
 export const enrollStudent = async (req, res, next) => {
   const session = await mongoose.startSession();
@@ -74,8 +81,13 @@ export const enrollStudent = async (req, res, next) => {
 
     let enrollment;
     let isReenrollment = false;
+    let admissionNumber;
 
     if (existingHistorical) {
+      // For re-enrollment, keep the old admission number for historical continuity
+      admissionNumber = existingHistorical.admissionNumber;
+      isReenrollment = true;
+      
       // Reactivate existing enrollment
       existingHistorical.status = 'enrolled';
       existingHistorical.enrollmentDate = new Date();
@@ -86,8 +98,10 @@ export const enrollStudent = async (req, res, next) => {
       
       await existingHistorical.save({ session });
       enrollment = existingHistorical;
-      isReenrollment = true;
     } else {
+      // NEW ENROLLMENT - Generate admission number
+      admissionNumber = await generateAdmissionNumber(courseId);
+      
       // Check course capacity
       const enrolledCount = await Enrollment.countDocuments({
         course: courseId,
@@ -101,14 +115,15 @@ export const enrollStudent = async (req, res, next) => {
         return next(errorHandler(400, `Course is full. Maximum capacity is ${maxStudents} students`));
       }
 
-      // Create new enrollment
+      // Create new enrollment with generated admission number
       const [newEnrollment] = await Enrollment.create([{
         student: studentId,
         course: courseId,
         enrolledBy,
         notes,
         status: 'enrolled',
-        enrollmentDate: new Date()
+        enrollmentDate: new Date(),
+        admissionNumber // Store the generated admission number
       }], { session });
       
       enrollment = newEnrollment;
@@ -128,15 +143,12 @@ export const enrollStudent = async (req, res, next) => {
       await course.save({ session });
     }
 
-    // ============= NEW: Initialize Student Fee Record =============
-    // Import StudentFee model
+    // Initialize Student Fee Record
     const StudentFee = (await import('../models/studentFee.model.js')).default;
     
-    // Find or create student fee record
     let studentFee = await StudentFee.findOne({ student: studentId }).session(session);
     
     if (!studentFee) {
-      // Create new fee record for this student
       studentFee = await StudentFee.create([{
         student: studentId,
         courses: [{
@@ -147,13 +159,11 @@ export const enrollStudent = async (req, res, next) => {
         }]
       }], { session });
     } else {
-      // Check if this course is already in their fees
       const courseExistsInFees = studentFee.courses.some(
         c => c.course.toString() === courseId.toString()
       );
       
       if (!courseExistsInFees) {
-        // Add the course to their fees
         studentFee.courses.push({
           course: courseId,
           coursePrice: course.price,
@@ -163,10 +173,12 @@ export const enrollStudent = async (req, res, next) => {
         await studentFee.save({ session });
       }
     }
-    // ============= END NEW CODE =============
 
     await session.commitTransaction();
     session.endSession();
+
+    // Get all student's admission numbers for response
+    const allAdmissionNumbers = await getStudentAdmissionNumbers(studentId);
 
     const populatedEnrollment = await Enrollment.findById(enrollment._id)
       .populate({
@@ -177,11 +189,10 @@ export const enrollStudent = async (req, res, next) => {
           select: 'name email'
         }
       })
-      .populate('course', 'courseCode name maxStudents instructor price') // Added price to selection
+      .populate('course', 'courseCode name maxStudents instructor price')
       .populate('enrolledBy', 'name email');
 
-    // ============= NOTIFICATION: Student Enrolled =============
-    
+    // Send notifications
     try {
       const studentName = student.user?.name || 'A student';
       const courseName = course.name;
@@ -191,7 +202,7 @@ export const enrollStudent = async (req, res, next) => {
       // 1. NOTIFY ADMINS - New enrollment
       await NotificationService.createForRole('admin', {
         title: isReenrollment ? '🔄 Student Re-enrolled' : '🎓 New Course Enrollment',
-        message: `${studentName} has been ${isReenrollment ? 're-enrolled' : 'enrolled'} in ${courseCode} - ${courseName}. Course fee: KSh ${coursePrice?.toLocaleString() || '0'}`,
+        message: `${studentName} has been ${isReenrollment ? 're-enrolled' : 'enrolled'} in ${courseCode} - ${courseName}. Admission Number: ${admissionNumber}. Course fee: KSh ${coursePrice?.toLocaleString() || '0'}`,
         type: 'course',
         actionUrl: `/courses/${courseId}/enrollments`
       });
@@ -201,17 +212,17 @@ export const enrollStudent = async (req, res, next) => {
         await NotificationService.createNotification({
           recipientId: course.instructor._id,
           title: '👨‍🎓 New Student Enrolled',
-          message: `${studentName} has enrolled in your course: ${courseCode} - ${courseName}.`,
+          message: `${studentName} has enrolled in your course: ${courseCode} - ${courseName}. Admission Number: ${admissionNumber}`,
           type: 'course',
           actionUrl: `/courses/${courseId}/enrollments`
         });
       }
 
-      // 3. NOTIFY THE STUDENT - Welcome to course with fee information
+      // 3. NOTIFY THE STUDENT - Welcome to course with admission number
       if (student.user && student.user._id) {
         const welcomeMessage = isReenrollment 
-          ? `You have been successfully re-enrolled in ${courseCode} - ${courseName}. Welcome back! Course fee: KSh ${coursePrice?.toLocaleString() || '0'}`
-          : `You have been successfully enrolled in ${courseCode} - ${courseName}. Your journey begins ${course.intakeMonth} ${course.intakeYear}. Course fee: KSh ${coursePrice?.toLocaleString() || '0'}`;
+          ? `You have been successfully re-enrolled in ${courseCode} - ${courseName}. Your Admission Number is: ${admissionNumber}. Welcome back! Course fee: KSh ${coursePrice?.toLocaleString() || '0'}`
+          : `You have been successfully enrolled in ${courseCode} - ${courseName}. Your Admission Number is: ${admissionNumber}. Your journey begins ${course.intakeMonth} ${course.intakeYear}. Course fee: KSh ${coursePrice?.toLocaleString() || '0'}`;
 
         await NotificationService.createNotification({
           recipientId: student.user._id,
@@ -221,13 +232,11 @@ export const enrollStudent = async (req, res, next) => {
           actionUrl: `/courses/${courseId}`
         });
       }
-
     } catch (notificationError) {
       console.error('Failed to send enrollment notifications:', notificationError);
     }
 
-    // ============= ENHANCED RESPONSE with fee info =============
-    // Get the updated student fee record to return with response
+    // Get updated student fee record
     const updatedStudentFee = await StudentFee.findOne({ student: studentId })
       .populate('courses.course', 'courseCode name price');
 
@@ -235,10 +244,13 @@ export const enrollStudent = async (req, res, next) => {
       success: true,
       data: {
         enrollment: populatedEnrollment,
+        admissionNumber,
+        isReenrollment,
         course: {
           ...course.toObject(),
           formattedPrice: `KSh ${course.price?.toLocaleString() || '0'}`
         },
+        studentAdmissionNumbers: allAdmissionNumbers,
         feeSummary: updatedStudentFee ? {
           totalFees: updatedStudentFee.totalFees,
           totalPaid: updatedStudentFee.totalPaid,
@@ -309,13 +321,14 @@ export const removeStudent = async (req, res, next) => {
     const courseCode = enrollment.course?.courseCode;
     const instructorId = enrollment.course?.instructor?._id;
     const studentUserId = enrollment.student?.user?._id;
+    const admissionNumber = enrollment.admissionNumber;
 
     // Update enrollment status to dropped
     enrollment.status = 'dropped';
     enrollment.droppedDate = new Date();
     await enrollment.save({ session });
 
-    // SYNC: Remove student from Course model's enrolledStudents array
+    // Remove student from Course model's enrolledStudents array
     const course = await Course.findById(courseId).session(session);
     if (course) {
       if (!course.enrolledStudents || !Array.isArray(course.enrolledStudents)) {
@@ -332,13 +345,12 @@ export const removeStudent = async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
-    // ============= NOTIFICATION: Student Removed =============
-    
+    // Send notifications
     try {
       // 1. NOTIFY ADMINS - Student dropped
       await NotificationService.createForRole('admin', {
         title: '📉 Student Dropped Course',
-        message: `${studentName} has been removed from ${courseCode} - ${courseName} by ${req.user.name || 'a staff member'}.`,
+        message: `${studentName} (Admission Number: ${admissionNumber}) has been removed from ${courseCode} - ${courseName} by ${req.user.name || 'a staff member'}.`,
         type: 'course',
         actionUrl: `/courses/${courseId}/enrollments`
       });
@@ -348,7 +360,7 @@ export const removeStudent = async (req, res, next) => {
         await NotificationService.createNotification({
           recipientId: instructorId,
           title: '📉 Student Dropped',
-          message: `${studentName} has been removed from your course: ${courseCode} - ${courseName}.`,
+          message: `${studentName} (Admission Number: ${admissionNumber}) has been removed from your course: ${courseCode} - ${courseName}.`,
           type: 'course',
           actionUrl: `/courses/${courseId}/enrollments`
         });
@@ -359,12 +371,11 @@ export const removeStudent = async (req, res, next) => {
         await NotificationService.createNotification({
           recipientId: studentUserId,
           title: '❌ Course Removal',
-          message: `You have been removed from ${courseCode} - ${courseName}. If you believe this is an error, please contact the administration.`,
+          message: `You have been removed from ${courseCode} - ${courseName} (Admission Number: ${admissionNumber}). If you believe this is an error, please contact the administration.`,
           type: 'course',
           actionUrl: `/courses`
         });
       }
-
     } catch (notificationError) {
       console.error('Failed to send removal notifications:', notificationError);
     }
@@ -424,10 +435,22 @@ export const getCourseEnrollments = async (req, res, next) => {
       .populate('enrolledBy', 'name email')
       .sort({ enrollmentDate: -1 });
 
+    // Get course stats
+    const stats = await getCourseEnrollmentStats(courseId);
+
     res.json({
       success: true,
-      data: enrollments,
-      count: enrollments.length
+      data: {
+        course: {
+          id: course._id,
+          code: course.courseCode,
+          name: course.name,
+          maxStudents: course.maxStudents
+        },
+        stats,
+        enrollments,
+        count: enrollments.length
+      }
     });
 
   } catch (error) {
@@ -454,7 +477,7 @@ export const getStudentEnrollments = async (req, res, next) => {
     })
       .populate({
         path: 'course',
-        select: 'courseCode name instructor schedule',
+        select: 'courseCode name instructor schedule price duration',
         populate: {
           path: 'instructor',
           select: 'name email'
@@ -463,10 +486,21 @@ export const getStudentEnrollments = async (req, res, next) => {
       .populate('enrolledBy', 'name email')
       .sort({ enrollmentDate: -1 });
 
+    // Get all admission numbers for this student
+    const allAdmissionNumbers = await getStudentAdmissionNumbers(studentId);
+
     res.json({
       success: true,
-      data: enrollments,
-      count: enrollments.length
+      data: {
+        student: {
+          id: student._id,
+          name: student.user?.name,
+          email: student.user?.email
+        },
+        admissionNumbers: allAdmissionNumbers,
+        enrollments,
+        count: enrollments.length
+      }
     });
 
   } catch (error) {
@@ -515,6 +549,7 @@ export const updateEnrollmentStatus = async (req, res, next) => {
     const courseCode = enrollment.course?.courseCode;
     const instructorId = enrollment.course?.instructor?._id;
     const studentUserId = enrollment.student?.user?._id;
+    const admissionNumber = enrollment.admissionNumber;
     
     // Update enrollment fields
     if (status) enrollment.status = status;
@@ -530,7 +565,7 @@ export const updateEnrollmentStatus = async (req, res, next) => {
     
     await enrollment.save({ session });
 
-    // SYNC: Update Course model's enrolledStudents array
+    // Update Course model's enrolledStudents array
     const course = await Course.findById(enrollment.course._id).session(session);
     
     if (course) {
@@ -559,25 +594,24 @@ export const updateEnrollmentStatus = async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
-    // ============= NOTIFICATION: Enrollment Status Updated =============
-    
+    // Send notifications
     try {
       if (status && status !== oldStatus) {
         const statusMessages = {
           completed: {
             title: '✅ Course Completed',
             action: 'has completed',
-            studentMessage: `Congratulations! You have successfully completed ${courseCode} - ${courseName}. Well done! 🎉`
+            studentMessage: `Congratulations! You have successfully completed ${courseCode} - ${courseName} (Admission Number: ${admissionNumber}). Well done! 🎉`
           },
           dropped: {
             title: '📉 Course Dropped',
             action: 'has dropped',
-            studentMessage: `You have been marked as dropped from ${courseCode} - ${courseName}.`
+            studentMessage: `You have been marked as dropped from ${courseCode} - ${courseName} (Admission Number: ${admissionNumber}).`
           },
           enrolled: {
             title: '🔄 Student Re-enrolled',
             action: 'has been re-enrolled in',
-            studentMessage: `You have been re-enrolled in ${courseCode} - ${courseName}.`
+            studentMessage: `You have been re-enrolled in ${courseCode} - ${courseName} (Admission Number: ${admissionNumber}).`
           }
         };
 
@@ -587,7 +621,7 @@ export const updateEnrollmentStatus = async (req, res, next) => {
           // 1. NOTIFY ADMINS - Status change
           await NotificationService.createForRole('admin', {
             title: config.title,
-            message: `${studentName} ${config.action} ${courseCode} - ${courseName}.`,
+            message: `${studentName} (${admissionNumber}) ${config.action} ${courseCode} - ${courseName}.`,
             type: 'course',
             actionUrl: `/courses/${enrollment.course._id}/enrollments`
           });
@@ -597,7 +631,7 @@ export const updateEnrollmentStatus = async (req, res, next) => {
             await NotificationService.createNotification({
               recipientId: instructorId,
               title: config.title,
-              message: `${studentName} ${config.action} your course: ${courseCode} - ${courseName}.`,
+              message: `${studentName} (${admissionNumber}) ${config.action} your course: ${courseCode} - ${courseName}.`,
               type: 'course',
               actionUrl: `/courses/${enrollment.course._id}/enrollments`
             });
@@ -615,12 +649,12 @@ export const updateEnrollmentStatus = async (req, res, next) => {
           }
         }
 
-        // 4. Special notification for completed with grade
+        // Special notification for completed with grade
         if (status === 'completed' && grade && studentUserId) {
           await NotificationService.createNotification({
             recipientId: studentUserId,
             title: '📊 Grade Posted',
-            message: `Your grade for ${courseCode} - ${courseName} is: ${grade}.`,
+            message: `Your grade for ${courseCode} - ${courseName} (Admission Number: ${admissionNumber}) is: ${grade}.`,
             type: 'course',
             actionUrl: `/courses/${enrollment.course._id}`
           });
@@ -673,6 +707,12 @@ export const bulkEnrollStudents = async (req, res, next) => {
     const { courseId, studentIds, notes } = req.body;
     const enrolledBy = req.user._id;
 
+    if (!courseId || !studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      await session.abortTransaction();
+      session.endSession();
+      return next(errorHandler(400, 'Course ID and student IDs array are required'));
+    }
+
     // Check if course exists with populated instructor
     const course = await Course.findById(courseId)
       .populate('instructor', 'name email')
@@ -684,13 +724,19 @@ export const bulkEnrollStudents = async (req, res, next) => {
       return next(errorHandler(404, 'Course not found'));
     }
 
+    if (course.status !== 'active') {
+      await session.abortTransaction();
+      session.endSession();
+      return next(errorHandler(400, 'Cannot enroll in inactive course'));
+    }
+
     // Check course capacity
-    const maxStudents = course.maxStudents || 20;
     const currentEnrollments = await Enrollment.countDocuments({
       course: courseId,
       status: 'enrolled'
     }).session(session);
 
+    const maxStudents = course.maxStudents || 20;
     const availableSpots = maxStudents - currentEnrollments;
     
     if (studentIds.length > availableSpots) {
@@ -733,6 +779,9 @@ export const bulkEnrollStudents = async (req, res, next) => {
           continue;
         }
 
+        // Generate admission number for this student
+        const admissionNumber = await generateAdmissionNumber(courseId);
+
         // Create enrollment
         const [enrollment] = await Enrollment.create([{
           student: studentId,
@@ -740,7 +789,8 @@ export const bulkEnrollStudents = async (req, res, next) => {
           enrolledBy,
           notes,
           status: 'enrolled',
-          enrollmentDate: new Date()
+          enrollmentDate: new Date(),
+          admissionNumber
         }], { session });
 
         // Add to course.enrolledStudents if not already there
@@ -748,22 +798,43 @@ export const bulkEnrollStudents = async (req, res, next) => {
           course.enrolledStudents.push(studentId);
         }
 
-        const populatedEnrollment = await Enrollment.findById(enrollment._id)
-          .populate({
-            path: 'student',
-            select: 'studentId',
-            populate: {
-              path: 'user',
-              select: 'name email'
-            }
-          })
-          .populate('course', 'courseCode name');
+        // Initialize Student Fee Record
+        const StudentFee = (await import('../models/studentFee.model.js')).default;
+        
+        let studentFee = await StudentFee.findOne({ student: studentId }).session(session);
+        
+        if (!studentFee) {
+          await StudentFee.create([{
+            student: studentId,
+            courses: [{
+              course: courseId,
+              coursePrice: course.price,
+              totalPaid: 0,
+              payments: []
+            }]
+          }], { session });
+        } else {
+          const courseExistsInFees = studentFee.courses.some(
+            c => c.course.toString() === courseId.toString()
+          );
+          
+          if (!courseExistsInFees) {
+            studentFee.courses.push({
+              course: courseId,
+              coursePrice: course.price,
+              totalPaid: 0,
+              payments: []
+            });
+            await studentFee.save({ session });
+          }
+        }
 
-        enrollments.push(populatedEnrollment);
+        enrollments.push(enrollment);
         successfulStudents.push({
           id: studentId,
           name: student.user?.name || 'Unknown',
-          email: student.user?.email
+          email: student.user?.email,
+          admissionNumber
         });
 
       } catch (error) {
@@ -779,8 +850,7 @@ export const bulkEnrollStudents = async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
-    // ============= NOTIFICATION: Bulk Enrollment =============
-    
+    // Send notifications for bulk enrollment
     try {
       if (enrollments.length > 0) {
         const courseName = course.name;
@@ -805,40 +875,51 @@ export const bulkEnrollStudents = async (req, res, next) => {
           });
         }
 
-        // 3. NOTIFY EACH STUDENT - Welcome to course (limit to first 5 to avoid spam)
-        const studentsToNotify = successfulStudents.slice(0, 5);
-        for (const student of studentsToNotify) {
-          const studentUser = await User.findOne({ email: student.email }).session(session);
+        // 3. NOTIFY EACH STUDENT - Welcome with admission number
+        for (const student of successfulStudents) {
+          const studentUser = await User.findOne({ email: student.email });
           if (studentUser) {
             await NotificationService.createNotification({
               recipientId: studentUser._id,
               title: '🎉 Welcome to the Course!',
-              message: `You have been enrolled in ${courseCode} - ${courseName}. Your journey begins ${course.intakeMonth} ${course.intakeYear}.`,
+              message: `You have been enrolled in ${courseCode} - ${courseName}. Your Admission Number is: ${student.admissionNumber}. Your journey begins ${course.intakeMonth} ${course.intakeYear}.`,
               type: 'course',
               actionUrl: `/courses/${courseId}`
             });
           }
-        }
-
-        // If more than 5 students, send a summary notification
-        if (successfulStudents.length > 5) {
-          // Could implement batch notification here
         }
       }
     } catch (notificationError) {
       console.error('Failed to send bulk enrollment notifications:', notificationError);
     }
 
+    // Populate enrollments for response
+    const populatedEnrollments = await Enrollment.find({ _id: { $in: enrollments.map(e => e._id) } })
+      .populate({
+        path: 'student',
+        select: 'studentId',
+        populate: {
+          path: 'user',
+          select: 'name email'
+        }
+      })
+      .populate('course', 'courseCode name');
+
     res.status(201).json({
       success: true,
       data: {
-        enrollments,
+        enrollments: populatedEnrollments,
         errors,
         summary: {
           attempted: studentIds.length,
           successful: enrollments.length,
           failed: errors.length
-        }
+        },
+        successfulStudents: successfulStudents.map(s => ({
+          name: s.name,
+          email: s.email,
+          admissionNumber: s.admissionNumber
+        }))
       },
       message: `Successfully enrolled ${enrollments.length} students`
     });
@@ -846,15 +927,19 @@ export const bulkEnrollStudents = async (req, res, next) => {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
+    console.error('Bulk enrollment error:', error);
     next(errorHandler(400, error.message));
   }
 };
 
 // @desc    Get enrollment statistics
 // @route   GET /api/enrollments/stats
-// @access  Private (Admin, Instructor)
 export const getEnrollmentStats = async (req, res, next) => {
   try {
+    if (!['admin', 'instructor'].includes(req.user.role)) {
+      return next(errorHandler(403, 'Not authorized'));
+    }
+
     const stats = await Enrollment.aggregate([
       {
         $group: {
@@ -883,6 +968,24 @@ export const getEnrollmentStats = async (req, res, next) => {
       enrollmentDate: { $gte: startOfMonth }
     });
 
+    // Get enrollment by course (top 5)
+    const topCourses = await Enrollment.aggregate([
+      { $match: { status: 'enrolled' } },
+      { $group: { _id: '$course', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 },
+      {
+        $lookup: {
+          from: 'courses',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'courseInfo'
+        }
+      },
+      { $unwind: '$courseInfo' },
+      { $project: { courseCode: '$courseInfo.courseCode', courseName: '$courseInfo.name', count: 1 } }
+    ]);
+
     // Format the stats
     const formattedStats = {
       total: await Enrollment.countDocuments(),
@@ -892,7 +995,8 @@ export const getEnrollmentStats = async (req, res, next) => {
       byStatus: stats.reduce((acc, stat) => {
         acc[stat._id] = stat.count;
         return acc;
-      }, {})
+      }, {}),
+      topCourses
     };
 
     res.json({
@@ -920,11 +1024,100 @@ export const getActiveEnrollmentCount = async (req, res, next) => {
           status: 'enrolled'
         });
       }
+    } else if (req.user.role === 'instructor') {
+      // Instructors see enrollments in their courses
+      const courses = await Course.find({ instructor: req.user._id }).select('_id');
+      const courseIds = courses.map(c => c._id);
+      count = await Enrollment.countDocuments({
+        course: { $in: courseIds },
+        status: 'enrolled'
+      });
+    } else if (req.user.role === 'admin') {
+      // Admins see all active enrollments
+      count = await Enrollment.countDocuments({ status: 'enrolled' });
     }
 
     res.json({
       success: true,
       data: { count }
+    });
+  } catch (error) {
+    next(errorHandler(500, error.message));
+  }
+};
+
+// @desc    Validate an admission number
+// @route   GET /api/enrollments/validate-admission-number/:admissionNumber
+export const validateAdmissionNumberAPI = async (req, res, next) => {
+  try {
+    const { admissionNumber } = req.params;
+    
+    if (!admissionNumber) {
+      return next(errorHandler(400, 'Admission number is required'));
+    }
+    
+    const validation = await validateAdmissionNumber(admissionNumber, true);
+    
+    if (validation.exists && validation.enrollment) {
+      const enrollment = validation.enrollment;
+      await enrollment.populate({
+        path: 'student',
+        populate: { path: 'user', select: 'name email' }
+      });
+      await enrollment.populate('course', 'courseCode name');
+      
+      res.json({
+        success: true,
+        data: {
+          isValid: true,
+          exists: true,
+          enrollment: {
+            admissionNumber: enrollment.admissionNumber,
+            studentName: enrollment.student?.user?.name,
+            studentEmail: enrollment.student?.user?.email,
+            courseCode: enrollment.course?.courseCode,
+            courseName: enrollment.course?.name,
+            status: enrollment.status,
+            enrollmentDate: enrollment.enrollmentDate
+          }
+        }
+      });
+    } else {
+      res.json({
+        success: true,
+        data: {
+          isValid: validation.isValid,
+          exists: false,
+          error: validation.error
+        }
+      });
+    }
+  } catch (error) {
+    next(errorHandler(500, error.message));
+  }
+};
+
+// @desc    Get enrollment by admission number
+// @route   GET /api/enrollments/admission-number/:admissionNumber
+export const getEnrollmentByAdmissionNumber = async (req, res, next) => {
+  try {
+    const { admissionNumber } = req.params;
+    
+    const enrollment = await Enrollment.findOne({ admissionNumber })
+      .populate({
+        path: 'student',
+        populate: { path: 'user', select: 'name email' }
+      })
+      .populate('course', 'courseCode name price duration')
+      .populate('enrolledBy', 'name email');
+    
+    if (!enrollment) {
+      return next(errorHandler(404, 'Enrollment not found with this admission number'));
+    }
+    
+    res.json({
+      success: true,
+      data: enrollment
     });
   } catch (error) {
     next(errorHandler(500, error.message));

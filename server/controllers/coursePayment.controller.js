@@ -155,50 +155,45 @@ export const getCoursePaymentSummary = async (req, res, next) => {
   }
 };
 
-// @desc    Get all students payment status for a specific course
-// @route   GET /api/courses/:courseId/payments/students
-// @access  Private (Admin, Instructor)
+// backend/controllers/coursePayment.controller.js - UPDATE getCourseStudentsPaymentStatus function
+
 export const getCourseStudentsPaymentStatus = async (req, res, next) => {
   try {
     const { courseId } = req.params;
     const { status, search } = req.query;
 
-    // Check if course exists
     const course = await Course.findById(courseId);
     if (!course) {
       return next(errorHandler(404, 'Course not found'));
     }
 
-    // Get all enrolled students with their payment info
+    // IMPORTANT: Populate student with phone field
     const enrollments = await Enrollment.find({
       course: courseId,
       status: 'enrolled'
     }).populate({
       path: 'student',
+      select: 'studentId phone user', // ADD phone to select
       populate: {
         path: 'user',
-        select: 'name email phone'
+        select: 'name email'
       }
     });
 
-    // Get all student fee records for these students
     const studentIds = enrollments.map(e => e.student._id);
     const studentFees = await StudentFee.find({
       student: { $in: studentIds }
     }).populate('courses.payments');
 
-    // Create a map for quick lookup
     const feeMap = {};
     studentFees.forEach(fee => {
       feeMap[fee.student.toString()] = fee;
     });
 
-    // Build student payment list
     let studentsList = enrollments.map(enrollment => {
       const student = enrollment.student;
       const feeRecord = feeMap[student._id.toString()];
       
-      // Find the specific course in this student's fees
       let courseFee = null;
       if (feeRecord) {
         courseFee = feeRecord.courses.find(
@@ -206,7 +201,6 @@ export const getCourseStudentsPaymentStatus = async (req, res, next) => {
         );
       }
 
-      // Get all payments for this specific course
       const coursePayments = courseFee?.payments || [];
       const totalPaid = courseFee?.totalPaid || 0;
       const balance = Math.max(0, course.price - totalPaid);
@@ -223,12 +217,13 @@ export const getCourseStudentsPaymentStatus = async (req, res, next) => {
 
       return {
         studentId: student._id,
-        studentNumber: student.studentId,
-        name: student.user?.name || 'Unknown',
-        email: student.user?.email,
-        phone: student.phone,
+        studentNumber: student.studentId || 'N/A',  // ADD THIS
+        studentName: student.user?.name || 'Unknown',
+        studentEmail: student.user?.email,
+        phone: student.user?.phone || 'N/A',  // ADD THIS - phone from Student model
+        admissionNumber: enrollment.admissionNumber,
         enrollmentDate: enrollment.enrollmentDate,
-        financials: {
+        payment: {
           coursePrice: course.price,
           totalPaid,
           balance,
@@ -251,29 +246,28 @@ export const getCourseStudentsPaymentStatus = async (req, res, next) => {
 
     // Apply filters
     if (status) {
-      studentsList = studentsList.filter(s => s.financials.status === status);
+      studentsList = studentsList.filter(s => s.payment.status === status);
     }
 
     if (search) {
       const searchLower = search.toLowerCase();
       studentsList = studentsList.filter(s => 
-        s.name.toLowerCase().includes(searchLower) ||
-        s.studentNumber.toLowerCase().includes(searchLower) ||
-        s.email.toLowerCase().includes(searchLower)
+        s.studentName.toLowerCase().includes(searchLower) ||
+        (s.studentNumber && s.studentNumber.toLowerCase().includes(searchLower)) ||
+        s.studentEmail.toLowerCase().includes(searchLower)
       );
     }
 
-    // Calculate summary statistics
     const summary = {
       totalStudents: studentsList.length,
-      paid: studentsList.filter(s => s.financials.status === 'paid').length,
-      partial: studentsList.filter(s => s.financials.status === 'partial').length,
-      unpaid: studentsList.filter(s => s.financials.status === 'unpaid').length,
-      overpaid: studentsList.filter(s => s.financials.status === 'overpaid').length,
-      totalCollected: studentsList.reduce((sum, s) => sum + s.financials.totalPaid, 0),
+      paid: studentsList.filter(s => s.payment.status === 'paid').length,
+      partial: studentsList.filter(s => s.payment.status === 'partial').length,
+      unpaid: studentsList.filter(s => s.payment.status === 'unpaid').length,
+      overpaid: studentsList.filter(s => s.payment.status === 'overpaid').length,
+      totalCollected: studentsList.reduce((sum, s) => sum + s.payment.totalPaid, 0),
       totalExpected: studentsList.length * course.price,
       averagePercentage: studentsList.length > 0
-        ? Math.round(studentsList.reduce((sum, s) => sum + s.financials.percentage, 0) / studentsList.length)
+        ? Math.round(studentsList.reduce((sum, s) => sum + s.payment.percentage, 0) / studentsList.length)
         : 0
     };
 
@@ -282,19 +276,26 @@ export const getCourseStudentsPaymentStatus = async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        courseInfo: {
-          id: course._id,
-          code: course.courseCode,
-          name: course.name,
-          price: course.price,
-          formattedPrice: course.formattedPrice
-        },
-        summary,
-        students: studentsList
+        courseCode: course.courseCode,
+        courseName: course.name,
+        students: studentsList,
+        summary: {
+          totalStudents: studentsList.length,
+          totalFees: summary.totalExpected,
+          totalPaid: summary.totalCollected,
+          totalBalance: summary.outstandingBalance,
+          collectionRate: summary.totalExpected > 0 ? (summary.totalCollected / summary.totalExpected) * 100 : 0,
+          paymentStatus: {
+            fullyPaid: summary.paid,
+            partial: summary.partial,
+            unpaid: summary.unpaid
+          }
+        }
       }
     });
 
   } catch (error) {
+    console.error('Get course students payment status error:', error);
     next(errorHandler(500, error.message));
   }
 };

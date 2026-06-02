@@ -1,4 +1,5 @@
-// src/components/Fees/CourseFees.jsx
+// src/components/Fees/CourseFees.jsx - COMPLETE FIXED VERSION
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
@@ -18,11 +19,12 @@ import {
   AlertCircle,
   User,
   Mail,
-  Phone,
   Search,
   Filter,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Loader,
+  Hash
 } from 'lucide-react';
 import Layout from '../Layout/Layout';
 import { usePaymentStore } from '../../stores/paymentStore';
@@ -32,13 +34,10 @@ import {
   formatCurrency,
   calculateProgress,
   getProgressColor,
-  getFeeStatusBadge,
-  getPaymentMethodInfo,
-  formatDate
+  getFeeStatusBadge
 } from '../../utils/feeFormatter';
-import PaymentMethodChart from './PaymentMethodChart';
-import OutstandingTable from './OutstandingTable';
 import ExportButtons from './ExportButtons';
+import { courseFeesExportConfig } from '../../utils/exportConfigs';
 import toast from 'react-hot-toast';
 
 const CourseFees = () => {
@@ -51,8 +50,7 @@ const CourseFees = () => {
     courseStudentsPaymentStatus,
     loading: paymentLoading,
     fetchCoursePaymentSummary,
-    fetchCourseStudentsPaymentStatus,
-    exportCoursePaymentReport
+    fetchCourseStudentsPaymentStatus
   } = usePaymentStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,7 +58,14 @@ const CourseFees = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [sortField, setSortField] = useState('balance');
   const [sortDirection, setSortDirection] = useState('desc');
-  const [expandedStats, setExpandedStats] = useState(false);
+  const [studentsList, setStudentsList] = useState([]);
+
+  // Log API responses for debugging
+  useEffect(() => {
+    console.log('Current Course:', currentCourse);
+    console.log('Course Payment Summary:', coursePaymentSummary);
+    console.log('Course Students Payment Status:', courseStudentsPaymentStatus);
+  }, [currentCourse, coursePaymentSummary, courseStudentsPaymentStatus]);
 
   // Load course data on mount
   useEffect(() => {
@@ -69,12 +74,68 @@ const CourseFees = () => {
     }
   }, [courseId]);
 
+  // Process students list - MATCHING ACTUAL API RESPONSE STRUCTURE
+  useEffect(() => {
+    let studentsData = null;
+    
+    if (courseStudentsPaymentStatus?.students) {
+      studentsData = courseStudentsPaymentStatus.students;
+    } else if (Array.isArray(courseStudentsPaymentStatus)) {
+      studentsData = courseStudentsPaymentStatus;
+    }
+    
+    if (studentsData && studentsData.length > 0) {
+      console.log('Students data found:', studentsData);
+      
+      // Create a map of student details from currentCourse.enrolledStudents
+      const studentDetailsMap = {};
+      if (currentCourse?.enrolledStudents) {
+        currentCourse.enrolledStudents.forEach(enrolled => {
+          studentDetailsMap[enrolled._id] = {
+            studentNumber: enrolled.studentId, // SBTC format ID
+          };
+        });
+      }
+      
+      // Transform the data - the API uses 'payment' object
+      const transformedStudents = studentsData.map(student => {
+        const details = studentDetailsMap[student.studentId] || {};
+        const paymentData = student.payment || {};
+        
+        return {
+          studentId: student.studentId,
+          studentName: student.studentName,
+          studentEmail: student.studentEmail,
+          studentNumber: details.studentNumber || student.studentNumber || student.studentId,
+          admissionNumber: student.admissionNumber,
+          payment: {
+            coursePrice: paymentData.coursePrice || 0,
+            totalPaid: paymentData.totalPaid || 0,
+            balance: paymentData.balance || 0,
+            percentage: paymentData.percentage || 0,
+            status: paymentData.status || 'unpaid'
+          }
+        };
+      });
+      
+      setStudentsList(transformedStudents);
+    } else {
+      console.log('No students data found in:', courseStudentsPaymentStatus);
+      setStudentsList([]);
+    }
+  }, [courseStudentsPaymentStatus, currentCourse]);
+
   const loadCourseData = async () => {
-    await Promise.all([
-      fetchCourse(courseId),
-      fetchCoursePaymentSummary(courseId),
-      fetchCourseStudentsPaymentStatus(courseId)
-    ]);
+    try {
+      await Promise.all([
+        fetchCourse(courseId),
+        fetchCoursePaymentSummary(courseId),
+        fetchCourseStudentsPaymentStatus(courseId)
+      ]);
+    } catch (error) {
+      console.error('Error loading course data:', error);
+      toast.error('Failed to load course data');
+    }
   };
 
   const handleRefresh = () => {
@@ -90,7 +151,6 @@ const CourseFees = () => {
     navigate(`/fees/student/${studentId}`);
   };
 
-  // FIXED: Navigate to record payment page with course and student pre-selected
   const handleRecordPayment = (student = null) => {
     const params = new URLSearchParams();
     params.append('courseId', courseId);
@@ -98,14 +158,6 @@ const CourseFees = () => {
       params.append('studentId', student.studentId);
     }
     navigate(`/fees/record-payment?${params.toString()}`);
-  };
-
-  const handleExport = async (format, options) => {
-    const result = await exportCoursePaymentReport(courseId, { format });
-    if (result.success) {
-      toast.success(`Course fees exported as ${format.toUpperCase()}`);
-    }
-    return result;
   };
 
   const handleSort = (field) => {
@@ -118,49 +170,112 @@ const CourseFees = () => {
   };
 
   // Filter and sort students
-  const filteredStudents = courseStudentsPaymentStatus
-    .filter(student => {
-      // Search filter
-      if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        const matchesSearch = 
-          student.name?.toLowerCase().includes(searchLower) ||
-          student.studentNumber?.toLowerCase().includes(searchLower) ||
-          student.email?.toLowerCase().includes(searchLower);
-        if (!matchesSearch) return false;
+  const getFilteredStudents = () => {
+    let students = [...studentsList];
+    
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      students = students.filter(student => 
+        (student.studentName?.toLowerCase().includes(searchLower) ||
+         student.studentNumber?.toLowerCase().includes(searchLower) ||
+         student.studentEmail?.toLowerCase().includes(searchLower) ||
+         student.admissionNumber?.toLowerCase().includes(searchLower))
+      );
+    }
+
+    if (statusFilter) {
+      students = students.filter(student => 
+        student.payment?.status === statusFilter
+      );
+    }
+
+    students.sort((a, b) => {
+      let aVal, bVal;
+      
+      switch (sortField) {
+        case 'studentName':
+          aVal = a.studentName || '';
+          bVal = b.studentName || '';
+          break;
+        case 'studentNumber':
+          aVal = a.studentNumber || a.studentId || '';
+          bVal = b.studentNumber || b.studentId || '';
+          break;
+        case 'balance':
+          aVal = a.payment?.balance || 0;
+          bVal = b.payment?.balance || 0;
+          break;
+        case 'percentage':
+          aVal = a.payment?.percentage || 0;
+          bVal = b.payment?.percentage || 0;
+          break;
+        case 'status':
+          aVal = a.payment?.status || '';
+          bVal = b.payment?.status || '';
+          break;
+        default:
+          aVal = a.payment?.balance || 0;
+          bVal = b.payment?.balance || 0;
       }
-
-      // Status filter
-      if (statusFilter && student.financials?.status !== statusFilter) {
-        return false;
-      }
-
-      return true;
-    })
-    .sort((a, b) => {
-      let aVal = a[sortField];
-      let bVal = b[sortField];
-
-      if (sortField === 'name') {
-        aVal = a.name || '';
-        bVal = b.name || '';
-      } else if (sortField === 'balance') {
-        aVal = a.financials?.balance || 0;
-        bVal = b.financials?.balance || 0;
-      } else if (sortField === 'percentage') {
-        aVal = a.financials?.percentage || 0;
-        bVal = b.financials?.percentage || 0;
-      } else if (sortField === 'status') {
-        aVal = a.financials?.status || '';
-        bVal = b.financials?.status || '';
-      }
-
+      
       if (sortDirection === 'asc') {
         return aVal > bVal ? 1 : -1;
       } else {
         return aVal < bVal ? 1 : -1;
       }
     });
+    
+    return students;
+  };
+
+  const filteredStudents = getFilteredStudents();
+  
+  // Get summary data from coursePaymentSummary
+  const totalExpected = coursePaymentSummary?.totalFees || 0;
+  const totalCollected = coursePaymentSummary?.totalPaid || 0;
+  const outstandingBalance = coursePaymentSummary?.totalBalance || 0;
+  const collectionRate = coursePaymentSummary?.collectionRate || 0;
+  const enrolledStudents = coursePaymentSummary?.totalStudents || 0;
+
+  const stats = {
+    totalStudents: filteredStudents.length,
+    paidCount: filteredStudents.filter(s => s.payment?.status === 'paid').length,
+    partialCount: filteredStudents.filter(s => s.payment?.status === 'partial').length,
+    unpaidCount: filteredStudents.filter(s => s.payment?.status === 'unpaid').length,
+    totalCollected: totalCollected,
+    totalExpected: totalExpected,
+    outstandingBalance: outstandingBalance,
+    collectionRate: collectionRate,
+    enrolledStudents: enrolledStudents
+  };
+
+  // Prepare export data
+  const exportData = studentsList.map(student => ({
+    studentName: student.studentName || 'N/A',
+    studentNumber: student.studentNumber || student.studentId || 'N/A',
+    admissionNumber: student.admissionNumber || 'Not assigned',
+    totalFees: student.payment?.coursePrice || 0,
+    amountPaid: student.payment?.totalPaid || 0,
+    balance: student.payment?.balance || 0,
+    paymentPercentage: `${Math.round(student.payment?.percentage || 0)}%`
+  }));
+
+  const dynamicConfig = {
+    ...courseFeesExportConfig,
+    title: `${currentCourse?.name || 'Course'} - Fee Report`,
+    filename: `${currentCourse?.courseCode || 'course'}_fee_report`,
+    summaryFields: courseFeesExportConfig.summaryFields.map(field => {
+      if (field.value === 'courseName') return { ...field, value: currentCourse?.name || 'N/A' };
+      if (field.value === 'courseCode') return { ...field, value: currentCourse?.courseCode || 'N/A' };
+      if (field.value === 'expectedRevenue') return { ...field, value: totalExpected };
+      if (field.value === 'totalCollected') return { ...field, value: totalCollected };
+      if (field.value === 'outstandingBalance') return { ...field, value: outstandingBalance };
+      if (field.value === 'collectionRate') return { ...field, value: collectionRate };
+      if (field.value === 'coursePrice') return { ...field, value: currentCourse?.price || 0 };
+      if (field.value === 'enrolledStudents') return { ...field, value: enrolledStudents };
+      return field;
+    })
+  };
 
   if (courseLoading || !currentCourse) {
     return (
@@ -171,25 +286,6 @@ const CourseFees = () => {
       </Layout>
     );
   }
-
-  const summary = coursePaymentSummary?.financialSummary || {
-    expectedRevenue: 0,
-    totalCollected: 0,
-    outstandingBalance: 0,
-    collectionPercentage: 0,
-    averagePerStudent: 0
-  };
-
-  const stats = {
-    totalStudents: filteredStudents.length,
-    paidCount: filteredStudents.filter(s => s.financials?.status === 'paid').length,
-    partialCount: filteredStudents.filter(s => s.financials?.status === 'partial').length,
-    unpaidCount: filteredStudents.filter(s => s.financials?.status === 'unpaid').length,
-    totalCollected: summary.totalCollected,
-    totalExpected: summary.expectedRevenue,
-    outstandingBalance: summary.outstandingBalance,
-    collectionRate: summary.collectionPercentage
-  };
 
   return (
     <Layout>
@@ -226,29 +322,11 @@ const CourseFees = () => {
               </button>
 
               <ExportButtons
-                data={filteredStudents}
-                filename={`course_fees_${courseId}`}
+                data={exportData}
+                config={dynamicConfig}
+                filename={`${currentCourse.courseCode}_fee_report`}
                 formats={['csv', 'excel', 'pdf', 'print', 'email']}
-                onExport={handleExport}
-                includeDateRange={true}
-                includeFilters={true}
-                customHeaders={['Student', 'ID', 'Email', 'Phone', 'Total Fees', 'Paid', 'Balance', 'Percentage', 'Status']}
-                customFormatter={(student, format) => {
-                  if (format === 'csv') {
-                    return [
-                      student.name,
-                      student.studentNumber,
-                      student.email,
-                      student.phone,
-                      student.financials?.coursePrice || 0,
-                      student.financials?.totalPaid || 0,
-                      student.financials?.balance || 0,
-                      `${student.financials?.percentage || 0}%`,
-                      student.financials?.status || 'unknown'
-                    ];
-                  }
-                  return student;
-                }}
+                includeDateRange={false}
                 buttonStyle="default"
                 buttonText="Export Report"
               />
@@ -293,7 +371,7 @@ const CourseFees = () => {
               <div className="text-right">
                 <p className="text-sm text-gray-600">Enrolled Students</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {stats.totalStudents} / {currentCourse.maxStudents}
+                  {stats.enrolledStudents} / {currentCourse.maxStudents}
                 </p>
               </div>
             </div>
@@ -328,7 +406,7 @@ const CourseFees = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <p className="text-sm text-gray-600 mb-2">Collection Rate</p>
             <p className="text-2xl font-bold text-purple-600">
-              {stats.collectionRate}%
+              {Math.round(stats.collectionRate)}%
             </p>
           </div>
         </div>
@@ -340,7 +418,7 @@ const CourseFees = () => {
               Collection Progress
             </span>
             <span className="text-sm font-medium text-gray-900">
-              {formatCurrency(stats.totalCollected)} / {formatCurrency(stats.totalExpected)} ({stats.collectionRate}%)
+              {formatCurrency(stats.totalCollected)} / {formatCurrency(stats.totalExpected)} ({Math.round(stats.collectionRate)}%)
             </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-3">
@@ -358,7 +436,7 @@ const CourseFees = () => {
         </div>
 
         {/* Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-green-50 rounded-lg border border-green-200 p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -388,38 +466,6 @@ const CourseFees = () => {
               <XCircle className="w-8 h-8 text-red-500" />
             </div>
           </div>
-
-          <div className="bg-purple-50 rounded-lg border border-purple-200 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-purple-700">Average per Student</p>
-                <p className="text-2xl font-bold text-purple-700">
-                  {formatCurrency(summary.averagePerStudent)}
-                </p>
-              </div>
-              <TrendingUp className="w-8 h-8 text-purple-500" />
-            </div>
-          </div>
-        </div>
-
-        {/* Payment Methods Chart (Collapsible) */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-          <button
-            onClick={() => setExpandedStats(!expandedStats)}
-            className="w-full px-6 py-4 flex items-center justify-between bg-gray-50 hover:bg-gray-100 transition-colors"
-          >
-            <div className="flex items-center space-x-2">
-              <PieChart className="w-5 h-5 text-green-600" />
-              <span className="font-medium text-gray-900">Payment Method Breakdown</span>
-            </div>
-            {expandedStats ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </button>
-
-          {expandedStats && (
-            <div className="p-6">
-              <PaymentMethodChart data={coursePaymentSummary?.paymentMethods || []} />
-            </div>
-          )}
         </div>
 
         {/* Search and Filters */}
@@ -429,7 +475,7 @@ const CourseFees = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search students by name, ID, or email..."
+                placeholder="Search by student name, number, or admission number..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
@@ -512,28 +558,42 @@ const CourseFees = () => {
                 <tr>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
-                    onClick={() => handleSort('name')}
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                    onClick={() => handleSort('studentName')}
                   >
                     <div className="flex items-center space-x-1">
+                      <User className="w-3 h-3" />
                       <span>Student</span>
-                      {sortField === 'name' && (
+                      {sortField === 'studentName' && (
                         sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
                       )}
                     </div>
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                    onClick={() => handleSort('studentNumber')}
                   >
-                    Contact
+                    <div className="flex items-center space-x-1">
+                      <Hash className="w-3 h-3" />
+                      <span>Student Number</span>
+                      {sortField === 'studentNumber' && (
+                        sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                      )}
+                    </div>
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Admission Number
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
                     onClick={() => handleSort('balance')}
                   >
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center justify-end space-x-1">
                       <span>Balance</span>
                       {sortField === 'balance' && (
                         sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
@@ -542,10 +602,10 @@ const CourseFees = () => {
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                    className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
                     onClick={() => handleSort('percentage')}
                   >
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center justify-center space-x-1">
                       <span>Progress</span>
                       {sortField === 'percentage' && (
                         sortDirection === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
@@ -554,7 +614,7 @@ const CourseFees = () => {
                   </th>
                   <th
                     scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
                     onClick={() => handleSort('status')}
                   >
                     <div className="flex items-center space-x-1">
@@ -564,7 +624,7 @@ const CourseFees = () => {
                       )}
                     </div>
                   </th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -573,76 +633,72 @@ const CourseFees = () => {
                 {filteredStudents.length > 0 ? (
                   filteredStudents.map((student) => (
                     <tr key={student.studentId} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="h-10 w-10 bg-gradient-to-r from-green-600 to-emerald-700 rounded-full flex items-center justify-center">
+                          <div className="h-9 w-9 bg-gradient-to-r from-green-600 to-emerald-700 rounded-full flex items-center justify-center">
                             <span className="text-white font-medium text-sm">
-                              {student.name?.charAt(0).toUpperCase()}
+                              {student.studentName?.charAt(0).toUpperCase()}
                             </span>
                           </div>
-                          <div className="ml-4">
+                          <div className="ml-3">
                             <div className="text-sm font-medium text-gray-900">
-                              {student.name}
+                              {student.studentName}
                             </div>
                             <div className="text-xs text-gray-500">
-                              {student.studentNumber}
+                              {student.studentEmail}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 flex items-center">
-                          <Mail className="w-4 h-4 mr-2 text-gray-400" />
-                          {student.email}
-                        </div>
-                        <div className="text-sm text-gray-500 flex items-center mt-1">
-                          <Phone className="w-4 h-4 mr-2 text-gray-400" />
-                          {student.phone}
-                        </div>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <code className="text-xs font-mono font-medium text-blue-700 bg-blue-50 px-2 py-1 rounded">
+                          {student.studentNumber || 'Not assigned'}
+                        </code>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <code className="text-xs font-mono font-medium text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                          {student.admissionNumber || 'Not assigned'}
+                        </code>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right">
                         <span className={`text-sm font-bold ${
-                          student.financials?.balance === 0 ? 'text-green-600' : 'text-orange-600'
+                          student.payment?.balance === 0 ? 'text-green-600' : 'text-orange-600'
                         }`}>
-                          {formatCurrency(student.financials?.balance || 0)}
+                          {formatCurrency(student.payment?.balance || 0)}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center justify-center space-x-2">
                           <span className={`text-sm font-medium ${
-                            student.financials?.percentage >= 75 ? 'text-green-600' :
-                            student.financials?.percentage >= 50 ? 'text-yellow-600' :
+                            (student.payment?.percentage || 0) >= 75 ? 'text-green-600' :
+                            (student.payment?.percentage || 0) >= 50 ? 'text-yellow-600' :
                             'text-red-600'
                           }`}>
-                            {student.financials?.percentage || 0}%
+                            {Math.round(student.payment?.percentage || 0)}%
                           </span>
                           <div className="w-16 bg-gray-200 rounded-full h-1.5">
                             <div
                               className={`h-1.5 rounded-full ${
-                                student.financials?.percentage >= 75 ? 'bg-green-500' :
-                                student.financials?.percentage >= 50 ? 'bg-yellow-500' :
+                                (student.payment?.percentage || 0) >= 75 ? 'bg-green-500' :
+                                (student.payment?.percentage || 0) >= 50 ? 'bg-yellow-500' :
                                 'bg-red-500'
                               }`}
-                              style={{ width: `${Math.min(100, student.financials?.percentage || 0)}%` }}
+                              style={{ width: `${Math.min(100, student.payment?.percentage || 0)}%` }}
                             />
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          student.financials?.status === 'paid' ? 'bg-green-100 text-green-800' :
-                          student.financials?.status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          student.payment?.status === 'paid' ? 'bg-green-100 text-green-800' :
+                          student.payment?.status === 'partial' ? 'bg-yellow-100 text-yellow-800' :
                           'bg-red-100 text-red-800'
                         }`}>
-                          {student.financials?.status === 'paid' ? '✅' :
-                           student.financials?.status === 'partial' ? '⚠️' : '❌'}
-                          <span className="ml-1">
-                            {student.financials?.status === 'paid' ? 'Fully Paid' :
-                             student.financials?.status === 'partial' ? 'Partial' : 'Unpaid'}
-                          </span>
+                          {student.payment?.status === 'paid' ? '✅ Fully Paid' :
+                           student.payment?.status === 'partial' ? '⚠️ Partial' : '❌ Unpaid'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end space-x-2">
                           <button
                             onClick={() => handleViewStudent(student.studentId)}
@@ -664,7 +720,7 @@ const CourseFees = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan="7" className="px-4 py-12 text-center text-gray-500">
                       <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                       <p className="text-lg font-medium text-gray-900 mb-2">No students found</p>
                       <p className="text-sm">
@@ -681,22 +737,22 @@ const CourseFees = () => {
 
           {/* Table Footer */}
           {filteredStudents.length > 0 && (
-            <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
+            <div className="px-4 py-3 bg-gray-50 border-t border-gray-200">
               <div className="flex items-center justify-between text-sm text-gray-500">
                 <span>
-                  Showing {filteredStudents.length} of {courseStudentsPaymentStatus.length} students
+                  Showing {filteredStudents.length} of {studentsList.length} students
                 </span>
                 <div className="flex items-center space-x-4">
                   <span className="flex items-center">
-                    <span className="w-3 h-3 rounded-full bg-green-500 mr-1"></span>
+                    <span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span>
                     Fully Paid: {stats.paidCount}
                   </span>
                   <span className="flex items-center">
-                    <span className="w-3 h-3 rounded-full bg-yellow-500 mr-1"></span>
+                    <span className="w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
                     Partial: {stats.partialCount}
                   </span>
                   <span className="flex items-center">
-                    <span className="w-3 h-3 rounded-full bg-red-500 mr-1"></span>
+                    <span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span>
                     Unpaid: {stats.unpaidCount}
                   </span>
                 </div>
@@ -705,29 +761,10 @@ const CourseFees = () => {
           )}
         </div>
 
-        {/* Monthly Trend */}
-        {coursePaymentSummary?.monthlyTrend && coursePaymentSummary.monthlyTrend.length > 0 && (
-          <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <TrendingUp className="w-5 h-5 mr-2 text-green-600" />
-              Monthly Collection Trend
-            </h3>
-            <div className="space-y-3">
-              {coursePaymentSummary.monthlyTrend.map((month, index) => (
-                <div key={index} className="flex items-center space-x-4">
-                  <span className="text-sm text-gray-600 w-24">{month.monthName}</span>
-                  <div className="flex-1 bg-gray-200 rounded-full h-2">
-                    <div
-                      className="h-2 rounded-full bg-green-500"
-                      style={{ width: `${(month.total / stats.totalExpected) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium text-gray-900 w-32 text-right">
-                    {formatCurrency(month.total)}
-                  </span>
-                </div>
-              ))}
-            </div>
+        {/* Loading indicator */}
+        {paymentLoading && (
+          <div className="mt-6 flex justify-center">
+            <Loader className="w-6 h-6 animate-spin text-green-600" />
           </div>
         )}
       </div>

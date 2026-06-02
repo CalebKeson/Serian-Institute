@@ -1,4 +1,5 @@
-// src/components/Fees/PaymentHistoryTable.jsx
+// src/components/Fees/PaymentHistoryTable.jsx - COMPLETE FIXED VERSION
+
 import React, { useState } from 'react';
 import {
   Receipt,
@@ -21,7 +22,9 @@ import {
   Clock,
   AlertCircle,
   FileText,
-  MoreVertical
+  MoreVertical,
+  Users,
+  Hash
 } from 'lucide-react';
 import {
   formatCurrency,
@@ -42,7 +45,8 @@ const PaymentHistoryTable = ({
   showStudentInfo = true,
   showCourseInfo = true,
   showActions = true,
-  compact = false
+  compact = false,
+  showPayerInfo = true  // NEW: Show payer info column
 }) => {
   const [sortConfig, setSortConfig] = useState({
     key: 'paymentDate',
@@ -79,6 +83,9 @@ const PaymentHistoryTable = ({
       } else if (sortConfig.key === 'amount') {
         aVal = a.amount || 0;
         bVal = b.amount || 0;
+      } else if (sortConfig.key === 'payerName') {
+        aVal = a.payerName || '';
+        bVal = b.payerName || '';
       }
 
       if (typeof aVal === 'string') {
@@ -131,6 +138,19 @@ const PaymentHistoryTable = ({
     return <Icon className="w-4 h-4" />;
   };
 
+  // Get relationship display
+  const getRelationshipDisplay = (relationship) => {
+    const relationships = {
+      self: 'Self (Student)',
+      parent: 'Parent',
+      guardian: 'Guardian',
+      sponsor: 'Sponsor',
+      employer: 'Employer',
+      other: 'Other'
+    };
+    return relationships[relationship] || relationship || 'Not specified';
+  };
+
   if (loading) {
     return (
       <div className="animate-pulse">
@@ -179,11 +199,24 @@ const PaymentHistoryTable = ({
                   <p className="text-xs text-gray-500">
                     {formatDateTime(payment.paymentDate)}
                   </p>
+                  {payment.payerName && (
+                    <p className="text-xs text-gray-500 flex items-center mt-0.5">
+                      <Users className="w-3 h-3 mr-1" />
+                      Paid by: {payment.payerName}
+                    </p>
+                  )}
                 </div>
               </div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadge.color}`}>
-                {payment.status}
-              </span>
+              <div className="text-right">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusBadge.color}`}>
+                  {payment.status}
+                </span>
+                {payment.receiptNumber && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Receipt: {payment.receiptNumber}
+                  </p>
+                )}
+              </div>
             </div>
           );
         })}
@@ -263,6 +296,25 @@ const PaymentHistoryTable = ({
             )}
             
             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Receipt #
+            </th>
+            
+            {showPayerInfo && (
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <button
+                  onClick={() => handleSort('payerName')}
+                  className="flex items-center space-x-1 hover:text-gray-700"
+                >
+                  <Users className="w-3 h-3" />
+                  <span>Paid By</span>
+                  {sortConfig.key === 'payerName' && (
+                    sortConfig.direction === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                  )}
+                </button>
+              </th>
+            )}
+            
+            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               <button
                 onClick={() => handleSort('amount')}
                 className="flex items-center space-x-1 hover:text-gray-700"
@@ -280,10 +332,6 @@ const PaymentHistoryTable = ({
             </th>
             
             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Purpose
-            </th>
-            
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Status
             </th>
             
@@ -297,7 +345,6 @@ const PaymentHistoryTable = ({
         <tbody className="bg-white divide-y divide-gray-200">
           {filteredPayments.map((payment) => {
             const methodInfo = getPaymentMethodInfo(payment.paymentMethod);
-            const purposeInfo = getPaymentPurposeInfo(payment.paymentFor);
             const statusBadge = getPaymentStatusBadge(payment.status);
             const isExpanded = expandedRows.includes(payment._id);
 
@@ -325,7 +372,7 @@ const PaymentHistoryTable = ({
                           </div>
                         </div>
                       </div>
-                    </td>
+                     </td>
                   )}
                   
                   {showCourseInfo && (
@@ -336,14 +383,36 @@ const PaymentHistoryTable = ({
                       <div className="text-xs text-gray-500">
                         {payment.course?.courseCode || ''}
                       </div>
-                    </td>
+                     </td>
+                  )}
+                  
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <code className="text-xs font-mono font-medium text-purple-700 bg-purple-50 px-2 py-1 rounded">
+                      {payment.receiptNumber || 'N/A'}
+                    </code>
+                   </td>
+                  
+                  {showPayerInfo && (
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">
+                        {payment.payerName || 'N/A'}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {getRelationshipDisplay(payment.payerRelationship)}
+                      </div>
+                      {payment.payerContact && (
+                        <div className="text-xs text-gray-400 mt-0.5">
+                          {payment.payerContact}
+                        </div>
+                      )}
+                     </td>
                   )}
                   
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className="text-sm font-bold text-gray-900">
                       {formatCurrency(payment.amount)}
                     </span>
-                  </td>
+                   </td>
                   
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center space-x-2">
@@ -354,23 +423,17 @@ const PaymentHistoryTable = ({
                     </div>
                     {payment.transactionId && (
                       <div className="text-xs text-gray-400 mt-1">
-                        ID: {payment.transactionId}
+                        Ref: {payment.transactionId}
                       </div>
                     )}
-                  </td>
-                  
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-600">
-                      {purposeInfo.label}
-                    </span>
-                  </td>
+                   </td>
                   
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge.color}`}>
                       {getStatusIcon(payment.status)}
                       <span className="ml-1 capitalize">{payment.status}</span>
                     </span>
-                  </td>
+                   </td>
                   
                   {showActions && (
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -413,15 +476,21 @@ const PaymentHistoryTable = ({
                           </button>
                         )}
                       </div>
-                    </td>
+                     </td>
                   )}
                 </tr>
 
-                {/* Expanded Row - Payment Details */}
+                {/* Expanded Row - Payment Details with Payer Info */}
                 {isExpanded && (
                   <tr className="bg-gray-50">
                     <td colSpan={showActions ? 8 : 7} className="px-6 py-4">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">Receipt Number</p>
+                          <p className="text-sm font-medium text-gray-900 font-mono">
+                            {payment.receiptNumber || 'N/A'}
+                          </p>
+                        </div>
                         <div>
                           <p className="text-xs text-gray-500 mb-1">Transaction ID</p>
                           <p className="text-sm font-medium text-gray-900">
@@ -429,15 +498,9 @@ const PaymentHistoryTable = ({
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500 mb-1">Reference</p>
+                          <p className="text-xs text-gray-500 mb-1">Reference Number</p>
                           <p className="text-sm font-medium text-gray-900">
                             {payment.paymentReference || 'N/A'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">Receipt #</p>
-                          <p className="text-sm font-medium text-gray-900">
-                            {generateReceiptNumber(payment)}
                           </p>
                         </div>
                         <div>
@@ -446,15 +509,46 @@ const PaymentHistoryTable = ({
                             {payment.recordedBy?.name || 'System'}
                           </p>
                         </div>
+                        {/* Payer Details Section */}
+                        <div className="col-span-2 bg-white p-3 rounded-lg border border-gray-200">
+                          <p className="text-xs font-semibold text-gray-700 mb-2 flex items-center">
+                            <Users className="w-3 h-3 mr-1" />
+                            Payer Information
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <span className="text-xs text-gray-500">Name:</span>
+                              <p className="font-medium text-gray-900">{payment.payerName || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs text-gray-500">Relationship:</span>
+                              <p className="font-medium text-gray-900">
+                                {getRelationshipDisplay(payment.payerRelationship)}
+                              </p>
+                            </div>
+                            {payment.payerContact && (
+                              <div className="col-span-2">
+                                <span className="text-xs text-gray-500">Contact:</span>
+                                <p className="font-medium text-gray-900">{payment.payerContact}</p>
+                              </div>
+                            )}
+                            {payment.payerNotes && (
+                              <div className="col-span-2">
+                                <span className="text-xs text-gray-500">Notes:</span>
+                                <p className="text-sm text-gray-700 mt-1">{payment.payerNotes}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                         {payment.notes && (
                           <div className="col-span-2">
-                            <p className="text-xs text-gray-500 mb-1">Notes</p>
+                            <p className="text-xs text-gray-500 mb-1">Payment Notes</p>
                             <p className="text-sm text-gray-700 bg-white p-2 rounded border border-gray-200">
                               {payment.notes}
                             </p>
                           </div>
                         )}
-                        <div className="col-span-2 flex items-center space-x-4">
+                        <div className="col-span-2 flex items-center space-x-4 mt-2">
                           <button
                             onClick={() => onPrint?.(payment)}
                             className="inline-flex items-center px-3 py-1 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition-colors"
@@ -471,8 +565,8 @@ const PaymentHistoryTable = ({
                           </button>
                         </div>
                       </div>
-                    </td>
-                  </tr>
+                     </td>
+                   </tr>
                 )}
               </React.Fragment>
             );

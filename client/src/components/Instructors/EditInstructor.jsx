@@ -1,4 +1,5 @@
-// frontend/src/pages/Instructors/EditInstructor.jsx
+// frontend/src/pages/Instructors/EditInstructor.jsx - COMPLETE FIXED VERSION
+
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { 
@@ -23,7 +24,6 @@ import {
 import Layout from "../../components/Layout/Layout";
 import { useInstructorStore } from "../../stores/instructorStore";
 import { useAuthStore } from "../../stores/authStore";
-import { useUserStore } from "../../stores/userStore";
 import { formatInstructorForAPI, formatInstructorForForm } from '../../utils/instructorDataFormatter';
 import toast from "react-hot-toast";
 
@@ -33,12 +33,13 @@ const EditInstructor = () => {
   const { user } = useAuthStore();
   const {
     currentInstructor,
+    instructors,
     fetchInstructor,
+    fetchInstructors,
     updateInstructor,
     loading,
     clearCurrentInstructor,
   } = useInstructorStore();
-  const { users, fetchUsers } = useUserStore();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -87,7 +88,6 @@ const EditInstructor = () => {
     notes: ""
   });
 
-  // Temporary state for dynamic arrays
   const [newQualification, setNewQualification] = useState({ degree: '', institution: '', year: '', grade: '' });
   const [newCertification, setNewCertification] = useState({ name: '', issuingBody: '', year: '', expiryDate: '' });
   const [newExpertise, setNewExpertise] = useState('');
@@ -96,12 +96,12 @@ const EditInstructor = () => {
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch users for supervisor dropdown
+  // Fetch instructors for supervisor dropdown
   useEffect(() => {
     if (user?.role === 'admin') {
-      fetchUsers({ role: ['admin', 'instructor'] });
+      fetchInstructors();
     }
-  }, [user]);
+  }, [user, fetchInstructors]);
 
   // Fetch instructor data when component mounts
   useEffect(() => {
@@ -112,7 +112,7 @@ const EditInstructor = () => {
     return () => {
       clearCurrentInstructor();
     };
-  }, [id]);
+  }, [id, fetchInstructor, clearCurrentInstructor]);
 
   // Populate form when instructor data is loaded
   useEffect(() => {
@@ -153,7 +153,6 @@ const EditInstructor = () => {
     }
   }, [currentInstructor]);
 
-  // Check if user is admin
   if (user?.role !== "admin") {
     navigate("/instructors");
     return null;
@@ -162,7 +161,6 @@ const EditInstructor = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     
-    // Handle nested objects
     if (name.startsWith("address.")) {
       const field = name.split(".")[1];
       setFormData(prev => ({
@@ -185,13 +183,11 @@ const EditInstructor = () => {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
 
-    // Clear error
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: "" }));
     }
   };
 
-  // Qualification handlers
   const addQualification = () => {
     if (newQualification.degree && newQualification.institution) {
       setFormData(prev => ({
@@ -209,7 +205,6 @@ const EditInstructor = () => {
     }));
   };
 
-  // Certification handlers
   const addCertification = () => {
     if (newCertification.name && newCertification.issuingBody) {
       setFormData(prev => ({
@@ -227,7 +222,6 @@ const EditInstructor = () => {
     }));
   };
 
-  // Expertise handlers
   const addExpertise = () => {
     if (newExpertise.trim()) {
       setFormData(prev => ({
@@ -245,7 +239,6 @@ const EditInstructor = () => {
     }));
   };
 
-  // Benefits handlers
   const addBenefit = () => {
     if (newBenefit.trim()) {
       setFormData(prev => ({
@@ -266,7 +259,6 @@ const EditInstructor = () => {
   const validateForm = () => {
     const newErrors = {};
 
-    // Required fields validation
     if (!formData.name.trim()) newErrors.name = "Full name is required";
     if (!formData.email.trim()) newErrors.email = "Email is required";
     if (!formData.department) newErrors.department = "Department is required";
@@ -274,17 +266,14 @@ const EditInstructor = () => {
     if (!formData.phone) newErrors.phone = "Phone number is required";
     if (!formData.hireDate) newErrors.hireDate = "Hire date is required";
 
-    // Email validation
     if (formData.email && !/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(formData.email)) {
       newErrors.email = "Please enter a valid email address";
     }
 
-    // Phone validation
     if (formData.phone && !/^\d{10}$/.test(formData.phone.replace(/\D/g, ""))) {
       newErrors.phone = "Please enter a valid 10-digit phone number";
     }
 
-    // Salary validation
     if (formData.salary && formData.salary < 0) {
       newErrors.salary = "Salary cannot be negative";
     }
@@ -340,12 +329,8 @@ const EditInstructor = () => {
       <Layout>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">
-            Instructor not found
-          </h3>
-          <p className="mt-1 text-sm text-gray-500">
-            The instructor you're looking for doesn't exist.
-          </p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Instructor not found</h3>
+          <p className="mt-1 text-sm text-gray-500">The instructor you're looking for doesn't exist.</p>
           <button
             onClick={handleCancel}
             className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
@@ -360,7 +345,6 @@ const EditInstructor = () => {
   return (
     <Layout>
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -388,7 +372,6 @@ const EditInstructor = () => {
           </div>
         </div>
 
-        {/* Form */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <form onSubmit={handleSubmit} className="p-6 space-y-8">
             {/* Account Information Section */}
@@ -399,9 +382,7 @@ const EditInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Full Name *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
                   <input
                     type="text"
                     name="name"
@@ -415,9 +396,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Address *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
                   <input
                     type="email"
                     name="email"
@@ -440,9 +419,7 @@ const EditInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Department *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Department *</label>
                   <input
                     type="text"
                     name="department"
@@ -454,9 +431,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Designation
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Designation</label>
                   <input
                     type="text"
                     name="designation"
@@ -467,9 +442,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Specialization *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Specialization *</label>
                   <input
                     type="text"
                     name="specialization"
@@ -481,9 +454,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Status
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                   <select
                     name="status"
                     value={formData.status}
@@ -499,9 +470,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Supervisor
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Supervisor</label>
                   <select
                     name="supervisor"
                     value={formData.supervisor}
@@ -509,9 +478,9 @@ const EditInstructor = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select Supervisor</option>
-                    {users?.map(user => (
-                      <option key={user._id} value={user._id}>
-                        {user.name} ({user.role})
+                    {instructors?.map((instructor) => (
+                      <option key={instructor._id} value={instructor.user?._id || instructor._id}>
+                        {instructor.user?.name || instructor.name} ({instructor.department || 'Instructor'})
                       </option>
                     ))}
                   </select>
@@ -586,9 +555,7 @@ const EditInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Hire Date *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Hire Date *</label>
                   <input
                     type="date"
                     name="hireDate"
@@ -600,9 +567,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Employment Type
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Employment Type</label>
                   <select
                     name="employmentType"
                     value={formData.employmentType}
@@ -617,9 +582,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Max Workload (Courses)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Max Workload (Courses)</label>
                   <input
                     type="number"
                     name="maxWorkload"
@@ -641,9 +604,7 @@ const EditInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Monthly Salary
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Salary</label>
                   <input
                     type="number"
                     name="salary"
@@ -655,9 +616,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payment Schedule
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Payment Schedule</label>
                   <select
                     name="paymentSchedule"
                     value={formData.paymentSchedule}
@@ -670,7 +629,6 @@ const EditInstructor = () => {
                 </div>
               </div>
 
-              {/* Bank Account */}
               <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                 <h3 className="text-md font-medium text-gray-900 mb-3">Bank Account</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -718,9 +676,7 @@ const EditInstructor = () => {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
                   <input
                     type="tel"
                     name="phone"
@@ -734,9 +690,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Personal Email (Optional)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Personal Email (Optional)</label>
                   <input
                     type="email"
                     name="personalEmail"
@@ -747,9 +701,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Date of Birth
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date of Birth</label>
                   <input
                     type="date"
                     name="dateOfBirth"
@@ -760,9 +712,7 @@ const EditInstructor = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Gender
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
                   <select
                     name="gender"
                     value={formData.gender}

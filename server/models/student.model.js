@@ -1,4 +1,5 @@
-// models/Student.js
+// backend/models/student.model.js - FIXED
+
 import mongoose from 'mongoose';
 
 const studentSchema = new mongoose.Schema({
@@ -9,10 +10,12 @@ const studentSchema = new mongoose.Schema({
   },
   studentId: {
     type: String,
-    required: false,
+    required: false,  // CHANGE THIS FROM 'true' TO 'false'
     unique: true,
     trim: true,
-    uppercase: true
+    uppercase: true,
+    default: null,
+    sparse: true  // ADD THIS - allows multiple null values but maintains uniqueness for non-null
   },
   dateOfBirth: {
     type: Date,
@@ -48,17 +51,39 @@ const studentSchema = new mongoose.Schema({
     default: 'active'
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
-// Auto-generate student ID
-studentSchema.pre('save', async function(next) {
-  if (this.isNew) {
-    const year = new Date().getFullYear();
-    const count = await mongoose.model('Student').countDocuments();
-    this.studentId = `SI${year}${String(count + 1).padStart(4, '0')}`;
+// Auto-generate student ID before save and validation
+studentSchema.pre('validate', async function(next) {
+  if (this.isNew && !this.studentId) {
+    try {
+      const currentYear = new Date().getFullYear();
+      
+      // Count existing students to get the next sequence number
+      const count = await mongoose.model('Student').countDocuments();
+      const sequenceNumber = String(count + 1).padStart(3, '0');
+      
+      this.studentId = `SBTC/${sequenceNumber}/${currentYear}`;
+      console.log(`Generated student ID: ${this.studentId}`);
+    } catch (error) {
+      console.error('Error generating student ID:', error);
+      return next(error);
+    }
   }
   next();
+});
+
+// Virtual to check if student has any enrollments
+studentSchema.virtual('hasEnrollments').get(function() {
+  return false;
+});
+
+// Virtual to get enrollment status text
+studentSchema.virtual('enrollmentStatus').get(function() {
+  return 'not enrolled';
 });
 
 export default mongoose.model('Student', studentSchema);

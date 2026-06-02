@@ -11,6 +11,14 @@ const enrollmentSchema = new mongoose.Schema({
     ref: 'Course',
     required: [true, 'Course is required']
   },
+  admissionNumber: {
+    type: String,
+    required: [true, 'Admission number is required'],
+    unique: true,
+    trim: true,
+    uppercase: true,
+    match: [/^[A-Z]{3,4}\/\d{3}\/\d{2}$/, 'Please enter a valid admission number format (e.g., CNA/001/26)']
+  },
   enrollmentDate: {
     type: Date,
     default: Date.now,
@@ -44,18 +52,23 @@ const enrollmentSchema = new mongoose.Schema({
     type: Date
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
 // Compound index to ensure unique student-course combination
 enrollmentSchema.index({ student: 1, course: 1 }, { unique: true });
+
+// Index for admission number lookups
+enrollmentSchema.index({ admissionNumber: 1 });
 
 // Index for better query performance
 enrollmentSchema.index({ course: 1, status: 1 });
 enrollmentSchema.index({ student: 1, status: 1 });
 enrollmentSchema.index({ enrollmentDate: -1 });
 
-// FIXED: Virtual for enrollment duration with ULTIMATE null checks
+// Virtual for enrollment duration with ULTIMATE null checks
 enrollmentSchema.virtual('enrollmentDuration').get(function() {
   try {
     // Safely get enrollment date
@@ -163,7 +176,7 @@ enrollmentSchema.statics.getStudentEnrollments = function(studentId, status = 'e
   return this.find({ student: studentId, status })
     .populate({
       path: 'course',
-      select: 'courseCode name instructor schedule',
+      select: 'courseCode name instructor schedule price',
       populate: {
         path: 'instructor',
         select: 'name email'
@@ -173,6 +186,54 @@ enrollmentSchema.statics.getStudentEnrollments = function(studentId, status = 'e
     .sort({ enrollmentDate: -1 });
 };
 
+// Static method to get all admission numbers for a student
+enrollmentSchema.statics.getStudentAdmissionNumbers = async function(studentId) {
+  try {
+    const enrollments = await this.find({ 
+      student: studentId,
+      status: 'enrolled'
+    }).populate('course', 'courseCode');
+    
+    return enrollments.map(enrollment => ({
+      admissionNumber: enrollment.admissionNumber,
+      courseCode: enrollment.course?.courseCode,
+      enrollmentId: enrollment._id
+    }));
+  } catch (error) {
+    console.error('Error getting student admission numbers:', error);
+    return [];
+  }
+};
+
+// Static method to get next admission number for a course
+enrollmentSchema.statics.getNextAdmissionNumber = async function(courseId) {
+  try {
+    const Course = mongoose.model('Course');
+    const course = await Course.findById(courseId);
+    
+    if (!course) {
+      throw new Error('Course not found');
+    }
+    
+    const currentYear = new Date().getFullYear().toString().slice(-2);
+    const courseCode = course.courseCode;
+    
+    // Count existing enrollments for this course
+    const count = await this.countDocuments({ 
+      course: courseId,
+      status: 'enrolled'
+    });
+    
+    const sequentialNumber = String(count + 1).padStart(3, '0');
+    const admissionNumber = `${courseCode}/${sequentialNumber}/${currentYear}`;
+    
+    return admissionNumber;
+  } catch (error) {
+    console.error('Error generating admission number:', error);
+    throw error;
+  }
+};
+
 // Instance method to get enrollment summary with safe access
 enrollmentSchema.methods.getSummary = function() {
   try {
@@ -180,6 +241,7 @@ enrollmentSchema.methods.getSummary = function() {
       enrollmentId: this._id,
       student: this.student,
       course: this.course,
+      admissionNumber: this.admissionNumber,
       status: this.status || 'unknown',
       enrollmentDate: this.enrollmentDate,
       duration: this.enrollmentDuration || 0,

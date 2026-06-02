@@ -1,4 +1,5 @@
-// src/stores/paymentStore.js
+// src/stores/paymentStore.js - COMPLETE FIXED VERSION
+
 import { create } from 'zustand';
 import { paymentAPI } from '../services/paymentAPI';
 import toast from 'react-hot-toast';
@@ -94,37 +95,36 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // src/stores/paymentStore.js - Update the fetchPayments method
-fetchPayments: async (filters = {}) => {
-  set({ loading: true, error: null });
-  
-  try {
-    const currentFilters = get().filters;
-    const updatedFilters = { ...currentFilters, ...filters };
+  // Fetch payments
+  fetchPayments: async (filters = {}) => {
+    set({ loading: true, error: null });
     
-    const response = await paymentAPI.getPayments(updatedFilters);
-    
-    // Ensure we're setting the data correctly
-    set({
-      payments: response.data.data || [],
-      pagination: response.data.pagination || {
-        current: updatedFilters.page || 1,
-        total: 1,
-        results: 0,
-        limit: updatedFilters.limit || 10
-      },
-      summary: response.data.summary || { totalAmount: 0 },
-      filters: updatedFilters,
-      loading: false
-    });
-    
-    return { success: true, data: response.data.data };
-  } catch (error) {
-    const errorMessage = error.response?.data?.message || 'Failed to fetch payments';
-    set({ error: errorMessage, loading: false });
-    return { success: false, message: errorMessage };
-  }
-},
+    try {
+      const currentFilters = get().filters;
+      const updatedFilters = { ...currentFilters, ...filters };
+      
+      const response = await paymentAPI.getPayments(updatedFilters);
+      
+      set({
+        payments: response.data.data || [],
+        pagination: response.data.pagination || {
+          current: updatedFilters.page || 1,
+          total: 1,
+          results: 0,
+          limit: updatedFilters.limit || 10
+        },
+        summary: response.data.summary || { totalAmount: 0 },
+        filters: updatedFilters,
+        loading: false
+      });
+      
+      return { success: true, data: response.data.data };
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Failed to fetch payments';
+      set({ error: errorMessage, loading: false });
+      return { success: false, message: errorMessage };
+    }
+  },
 
   // Fetch single payment
   fetchPayment: async (id) => {
@@ -286,19 +286,27 @@ fetchPayments: async (filters = {}) => {
     }
   },
 
-  // Fetch course payment summary
+  // Fetch course payment summary - FIXED (prevents overwriting with empty data)
   fetchCoursePaymentSummary: async (courseId) => {
     set({ loading: true, error: null });
     
     try {
       const response = await paymentAPI.getCoursePaymentSummary(courseId);
       
+      const summaryData = response.data.data;
+      
+      // Skip update if data is empty and we already have valid data
+      if ((!summaryData || Object.keys(summaryData).length === 0) && get().coursePaymentSummary) {
+        set({ loading: false });
+        return { success: true, data: get().coursePaymentSummary };
+      }
+      
       set({
-        coursePaymentSummary: response.data.data,
+        coursePaymentSummary: summaryData,
         loading: false
       });
       
-      return { success: true, data: response.data.data };
+      return { success: true, data: summaryData };
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Failed to fetch course payment summary';
       set({ error: errorMessage, loading: false });
@@ -307,16 +315,25 @@ fetchPayments: async (filters = {}) => {
     }
   },
 
-  // Fetch course students payment status
+  // Fetch course students payment status - FIXED (prevents overwriting with empty data)
   fetchCourseStudentsPaymentStatus: async (courseId, params = {}) => {
     set({ loading: true, error: null });
     
     try {
       const response = await paymentAPI.getCourseStudentsPaymentStatus(courseId, params);
       
+      const studentsData = response.data.data?.students || [];
+      const summaryData = response.data.data?.summary;
+      
+      // Skip update if we got empty data but already have existing data
+      if (studentsData.length === 0 && get().courseStudentsPaymentStatus?.length > 0) {
+        set({ loading: false });
+        return { success: true, data: { students: get().courseStudentsPaymentStatus, summary: get().coursePaymentSummary } };
+      }
+      
       set({
-        courseStudentsPaymentStatus: response.data.data?.students || [],
-        coursePaymentSummary: response.data.data?.summary,
+        courseStudentsPaymentStatus: studentsData,
+        coursePaymentSummary: summaryData || get().coursePaymentSummary,
         loading: false
       });
       
@@ -345,6 +362,7 @@ fetchPayments: async (filters = {}) => {
       link.remove();
       
       set({ loading: false });
+      toast.success('Report exported successfully!');
       return { success: true };
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Failed to export report';
@@ -379,6 +397,14 @@ fetchPayments: async (filters = {}) => {
       toast.error(errorMessage);
       return { success: false, message: errorMessage };
     }
+  },
+
+  // Get cached course payment data (helper function)
+  getCachedCoursePaymentData: () => {
+    return {
+      coursePaymentSummary: get().coursePaymentSummary,
+      courseStudentsPaymentStatus: get().courseStudentsPaymentStatus
+    };
   },
 
   // Filter methods

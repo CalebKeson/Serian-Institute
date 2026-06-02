@@ -1,3 +1,5 @@
+// src/pages/Students/AddStudent.jsx - COMPLETE
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { 
@@ -33,7 +35,7 @@ const AddStudent = () => {
     password: '',
     confirmPassword: '',
     
-    // Student fields
+    // Student fields (NO studentId field - auto-generated)
     dateOfBirth: '',
     gender: '',
     phone: '',
@@ -55,7 +57,6 @@ const AddStudent = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Check if user is admin
   if (user?.role !== 'admin') {
     navigate('/students');
     return null;
@@ -64,7 +65,6 @@ const AddStudent = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     
-    // Handle nested objects (address, emergencyContact)
     if (name.startsWith('address.')) {
       const field = name.split('.')[1];
       setFormData(prev => ({
@@ -90,7 +90,6 @@ const AddStudent = () => {
       }));
     }
 
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -102,7 +101,6 @@ const AddStudent = () => {
   const validateForm = () => {
     const newErrors = {};
 
-    // Required fields validation
     if (!formData.name.trim()) newErrors.name = 'Full name is required';
     if (!formData.email.trim()) newErrors.email = 'Email is required';
     if (!formData.password) newErrors.password = 'Password is required';
@@ -118,26 +116,18 @@ const AddStudent = () => {
     if (!formData.emergencyContact.relationship.trim()) newErrors['emergencyContact.relationship'] = 'Relationship is required';
     if (!formData.emergencyContact.phone.trim()) newErrors['emergencyContact.phone'] = 'Emergency contact phone is required';
 
-    // Email validation
     if (formData.email && !/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email address';
     }
 
-    // Password validation (6+ characters)
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
+    if (formData.password && formData.password.length < 6) {
       newErrors.password = 'Password must be at least 6 characters';
     }
 
-    // Password match validation
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm password';
-    } else if (formData.password !== formData.confirmPassword) {
+    if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
-    // Phone validation
     if (formData.phone && !/^\d{10}$/.test(formData.phone.replace(/\D/g, ''))) {
       newErrors.phone = 'Please enter a valid 10-digit phone number';
     }
@@ -161,14 +151,17 @@ const AddStudent = () => {
     setIsSubmitting(true);
 
     try {
-      // Prepare data for API (remove confirmPassword and format)
       const { confirmPassword, ...submitData } = formData;
       const dataToSend = formatStudentForAPI(submitData, true);
       
       const result = await createStudent(dataToSend);
       
       if (result.success && result.data) {
-        toast.success(`Student created successfully! Student ID: ${result.data.studentId}`);
+        toast.success(
+          `Student ${result.data.user?.name} created successfully! ` +
+          `Student ID: ${result.data.studentId}. ` +
+          `Admission number will be generated when they enroll in a course.`
+        );
         navigate(`/students/${result.data._id}`);
       } else {
         toast.error(result.message || 'Failed to create student');
@@ -188,7 +181,6 @@ const AddStudent = () => {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -206,12 +198,18 @@ const AddStudent = () => {
                 <p className="mt-2 text-gray-600">
                   Create a new student account for Serian Institute
                 </p>
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700 flex items-center">
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                    Note: Student ID will be auto-generated as <strong>SBTC/XXX/YYYY</strong>.
+                    Admission numbers will be generated when the student enrolls in courses.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Form */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <form onSubmit={handleSubmit} className="p-6 space-y-8">
             {/* Personal Information Section */}
@@ -221,7 +219,6 @@ const AddStudent = () => {
                 Personal Information
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Full Name */}
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
                     Full Name *
@@ -245,7 +242,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* Email */}
                 <div>
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                     Email Address *
@@ -272,7 +268,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* Date of Birth */}
                 <div>
                   <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-2">
                     Date of Birth *
@@ -298,7 +293,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* Gender */}
                 <div>
                   <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-2">
                     Gender *
@@ -325,7 +319,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* Phone */}
                 <div>
                   <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
                     Phone Number *
@@ -361,7 +354,6 @@ const AddStudent = () => {
                 Address Information
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Street */}
                 <div className="md:col-span-2">
                   <label htmlFor="address.street" className="block text-sm font-medium text-gray-700 mb-2">
                     Street Address *
@@ -385,7 +377,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* City */}
                 <div>
                   <label htmlFor="address.city" className="block text-sm font-medium text-gray-700 mb-2">
                     City *
@@ -409,7 +400,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* State */}
                 <div>
                   <label htmlFor="address.state" className="block text-sm font-medium text-gray-700 mb-2">
                     State/Province *
@@ -433,7 +423,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* Zip Code */}
                 <div>
                   <label htmlFor="address.zipCode" className="block text-sm font-medium text-gray-700 mb-2">
                     ZIP/Postal Code *
@@ -466,7 +455,6 @@ const AddStudent = () => {
                 Emergency Contact
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Emergency Contact Name */}
                 <div>
                   <label htmlFor="emergencyContact.name" className="block text-sm font-medium text-gray-700 mb-2">
                     Contact Name *
@@ -490,7 +478,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* Relationship */}
                 <div>
                   <label htmlFor="emergencyContact.relationship" className="block text-sm font-medium text-gray-700 mb-2">
                     Relationship *
@@ -514,7 +501,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* Emergency Contact Phone */}
                 <div className="md:col-span-2">
                   <label htmlFor="emergencyContact.phone" className="block text-sm font-medium text-gray-700 mb-2">
                     Contact Phone Number *
@@ -550,7 +536,6 @@ const AddStudent = () => {
                 Account Security
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Password */}
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                     Password *
@@ -573,21 +558,15 @@ const AddStudent = () => {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
-                      {showPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {/* REAL-TIME VALIDATION */}
                   {formData.password && formData.password.length < 6 && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
                       <AlertCircle className="w-3 h-3 mr-1" />
                       Password must be at least 6 characters
                     </p>
                   )}
-                  {/* REQUIRED FIELD ERROR */}
                   {errors.password && !formData.password && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
                       <AlertCircle className="w-4 h-4 mr-1" />
@@ -596,7 +575,6 @@ const AddStudent = () => {
                   )}
                 </div>
 
-                {/* Confirm Password */}
                 <div>
                   <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
                     Confirm Password *
@@ -619,21 +597,15 @@ const AddStudent = () => {
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                     >
-                      {showConfirmPassword ? (
-                        <EyeOff className="w-4 h-4" />
-                      ) : (
-                        <Eye className="w-4 h-4" />
-                      )}
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                  {/* REAL-TIME VALIDATION */}
                   {formData.password && formData.confirmPassword && formData.password !== formData.confirmPassword && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
                       <AlertCircle className="w-3 h-3 mr-1" />
                       Passwords do not match
                     </p>
                   )}
-                  {/* REQUIRED FIELD ERROR */}
                   {errors.confirmPassword && !formData.confirmPassword && (
                     <p className="mt-1 text-sm text-red-600 flex items-center">
                       <AlertCircle className="w-4 h-4 mr-1" />

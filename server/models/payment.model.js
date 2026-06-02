@@ -1,3 +1,5 @@
+// backend/models/payment.model.js - COMPLETE UPDATED VERSION
+
 import mongoose from 'mongoose';
 
 const paymentSchema = new mongoose.Schema({
@@ -32,9 +34,45 @@ const paymentSchema = new mongoose.Schema({
   paymentMethod: {
     type: String,
     required: [true, 'Payment method is required'],
-    enum: ['mpesa', 'cooperative_bank', 'family_bank', 'cash', 'other'],
+    enum: ['mpesa', 'cooperative_bank', 'family_bank', 'cash', 'bank_transfer', 'other'],
     default: 'cash'
   },
+  
+  // ============= PAYER INFORMATION =============
+  payerName: {
+    type: String,
+    trim: true,
+    required: [true, 'Payer name is required'],
+    description: 'Name of the person making the payment (parent/guardian/student)'
+  },
+  payerRelationship: {
+    type: String,
+    enum: ['self', 'parent', 'guardian', 'sponsor', 'employer', 'other'],
+    default: 'self',
+    description: 'Relationship of payer to the student'
+  },
+  payerContact: {
+    type: String,
+    trim: true,
+    description: 'Phone number or email of the payer'
+  },
+  payerNotes: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Payer notes cannot exceed 200 characters']
+  },
+  
+  // ============= RECEIPT NUMBER =============
+  receiptNumber: {
+    type: String,
+    trim: true,
+    required: [true, 'Receipt number is required'],
+    unique: true,
+    sparse: true,
+    description: 'Receipt book number (e.g., RCP-001, 2024-001)'
+  },
+  
+  // ============= EXISTING FIELDS =============
   transactionId: {
     type: String,
     trim: true,
@@ -45,7 +83,7 @@ const paymentSchema = new mongoose.Schema({
   paymentReference: {
     type: String,
     trim: true,
-    description: 'Internal reference or receipt number'
+    description: 'Internal reference or additional reference number'
   },
   paymentFor: {
     type: String,
@@ -83,11 +121,13 @@ const paymentSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Compound indexes for efficient queries
+// Indexes
+paymentSchema.index({ receiptNumber: 1 }, { unique: true, sparse: true });
+paymentSchema.index({ payerName: 1 });
+paymentSchema.index({ payerRelationship: 1 });
 paymentSchema.index({ student: 1, course: 1 });
 paymentSchema.index({ paymentDate: -1 });
 paymentSchema.index({ paymentMethod: 1, status: 1 });
-// paymentSchema.index({ transactionId: 1 }, { unique: true, sparse: true });
 
 // Virtual for formatted amount
 paymentSchema.virtual('formattedAmount').get(function() {
@@ -101,6 +141,7 @@ paymentSchema.virtual('paymentMethodDisplay').get(function() {
     cooperative_bank: 'Co-operative Bank',
     family_bank: 'Family Bank',
     cash: 'Cash',
+    bank_transfer: 'Bank Transfer',
     other: 'Other'
   };
   return methods[this.paymentMethod] || this.paymentMethod;
@@ -119,15 +160,35 @@ paymentSchema.virtual('paymentForDisplay').get(function() {
   return purposes[this.paymentFor] || this.paymentFor;
 });
 
-// Pre-save middleware to format transaction ID for M-Pesa
+// Virtual for payer relationship display
+paymentSchema.virtual('payerRelationshipDisplay').get(function() {
+  const relationships = {
+    self: 'Self (Student)',
+    parent: 'Parent',
+    guardian: 'Guardian',
+    sponsor: 'Sponsor',
+    employer: 'Employer',
+    other: 'Other'
+  };
+  return relationships[this.payerRelationship] || this.payerRelationship;
+});
+
+// Pre-save middleware
 paymentSchema.pre('save', function(next) {
   if (this.paymentMethod === 'mpesa' && this.transactionId) {
     this.transactionId = this.transactionId.trim().toUpperCase();
   }
+  
+  if (this.receiptNumber) {
+    this.receiptNumber = this.receiptNumber.trim().toUpperCase();
+  }
+  
   next();
 });
 
-// Static method to get total payments for a student
+// ============= STATIC METHODS =============
+
+// Get total payments for a student
 paymentSchema.statics.getStudentTotal = async function(studentId) {
   const result = await this.aggregate([
     { $match: { student: new mongoose.Types.ObjectId(studentId), status: 'completed' } },
@@ -136,7 +197,63 @@ paymentSchema.statics.getStudentTotal = async function(studentId) {
   return result.length > 0 ? result[0].total : 0;
 };
 
-// Static method to get payments breakdown by course for a student
+// Get all courses with outstanding balances for a student (for dropdown)
+paymentSchema.statics.getStudentOutstandingBalances = async function(studentId) {
+  const StudentFee = mongoose.model('StudentFee');
+  const studentFee = await StudentFee.findOne({ student: studentId })
+    .populate('courses.course', 'courseCode name price');
+  
+  if (!studentFee || !studentFee.courses.length) {
+    return [];
+  }
+  
+  return studentFee.courses.map(course => ({
+    courseId: course.course._id,
+    courseCode: course.course.courseCode,
+    courseName: course.course.name,
+    totalPrice: course.coursePrice,
+    totalPaid: course.totalPaid,
+    remainingBalance: course.remainingBalance,
+    paymentPercentage: course.paymentPercentage,
+    status: course.status
+  }));
+};
+
+// Get payment summary for a student across all courses
+paymentSchema.statics.getStudentPaymentSummary = async function(studentId) {
+  const StudentFee = mongoose.model('StudentFee');
+  const studentFee = await StudentFee.findOne({ student: studentId })
+    .populate('courses.course', 'courseCode name price');
+  
+  if (!studentFee) {
+    return {
+      totalFees: 0,
+      totalPaid: 0,
+      totalBalance: 0,
+      overallPercentage: 0,
+      courses: []
+    };
+  }
+  
+  return {
+    totalFees: studentFee.totalFees,
+    totalPaid: studentFee.totalPaid,
+    totalBalance: studentFee.totalBalance,
+    overallPercentage: studentFee.overallPercentage,
+    courses: studentFee.courses.map(course => ({
+      courseId: course.course._id,
+      courseCode: course.course.courseCode,
+      courseName: course.course.name,
+      price: course.coursePrice,
+      paid: course.totalPaid,
+      balance: course.remainingBalance,
+      percentage: course.paymentPercentage,
+      status: course.status
+    }))
+  };
+};
+
+// Get payments breakdown by course for a student
 paymentSchema.statics.getStudentPaymentsByCourse = async function(studentId) {
   return this.aggregate([
     { $match: { student: new mongoose.Types.ObjectId(studentId), status: 'completed' } },
@@ -180,7 +297,7 @@ paymentSchema.statics.getStudentPaymentsByCourse = async function(studentId) {
   ]);
 };
 
-// Static method to get payment statistics
+// Get payment statistics
 paymentSchema.statics.getPaymentStats = async function(startDate, endDate) {
   const matchStage = { status: 'completed' };
   
@@ -223,7 +340,8 @@ paymentSchema.statics.getPaymentStats = async function(startDate, endDate) {
                     { case: { $eq: ['$_id', 'mpesa'] }, then: 'M-Pesa' },
                     { case: { $eq: ['$_id', 'cooperative_bank'] }, then: 'Co-operative Bank' },
                     { case: { $eq: ['$_id', 'family_bank'] }, then: 'Family Bank' },
-                    { case: { $eq: ['$_id', 'cash'] }, then: 'Cash' }
+                    { case: { $eq: ['$_id', 'cash'] }, then: 'Cash' },
+                    { case: { $eq: ['$_id', 'bank_transfer'] }, then: 'Bank Transfer' }
                   ],
                   default: 'Other'
                 }
@@ -233,25 +351,25 @@ paymentSchema.statics.getPaymentStats = async function(startDate, endDate) {
             }
           }
         ],
-        byPurpose: [
-          { 
-            $group: { 
-              _id: '$paymentFor', 
-              total: { $sum: '$amount' }, 
-              count: { $sum: 1 } 
+        byRelationship: [
+          {
+            $group: {
+              _id: '$payerRelationship',
+              total: { $sum: '$amount' },
+              count: { $sum: 1 }
             }
           },
           {
             $project: {
-              purpose: '$_id',
-              purposeDisplay: {
+              relationship: '$_id',
+              relationshipDisplay: {
                 $switch: {
                   branches: [
-                    { case: { $eq: ['$_id', 'tuition'] }, then: 'Tuition Fee' },
-                    { case: { $eq: ['$_id', 'registration'] }, then: 'Registration Fee' },
-                    { case: { $eq: ['$_id', 'exam_fee'] }, then: 'Examination Fee' },
-                    { case: { $eq: ['$_id', 'lab_fee'] }, then: 'Skills Lab Fee' },
-                    { case: { $eq: ['$_id', 'materials'] }, then: 'Learning Materials' }
+                    { case: { $eq: ['$_id', 'self'] }, then: 'Self (Student)' },
+                    { case: { $eq: ['$_id', 'parent'] }, then: 'Parent' },
+                    { case: { $eq: ['$_id', 'guardian'] }, then: 'Guardian' },
+                    { case: { $eq: ['$_id', 'sponsor'] }, then: 'Sponsor' },
+                    { case: { $eq: ['$_id', 'employer'] }, then: 'Employer' }
                   ],
                   default: 'Other'
                 }
@@ -313,18 +431,10 @@ paymentSchema.statics.getPaymentStats = async function(startDate, endDate) {
               amount: 1,
               formattedAmount: { $concat: ['KSh ', { $toString: '$amount' }] },
               paymentDate: 1,
+              receiptNumber: 1,
+              payerName: 1,
+              payerRelationship: 1,
               paymentMethod: 1,
-              paymentMethodDisplay: {
-                $switch: {
-                  branches: [
-                    { case: { $eq: ['$paymentMethod', 'mpesa'] }, then: 'M-Pesa' },
-                    { case: { $eq: ['$paymentMethod', 'cooperative_bank'] }, then: 'Co-operative Bank' },
-                    { case: { $eq: ['$paymentMethod', 'family_bank'] }, then: 'Family Bank' },
-                    { case: { $eq: ['$paymentMethod', 'cash'] }, then: 'Cash' }
-                  ],
-                  default: 'Other'
-                }
-              },
               transactionId: 1,
               studentName: { $arrayElemAt: ['$userInfo.name', 0] },
               studentId: { $arrayElemAt: ['$studentInfo.studentId', 0] },
@@ -338,7 +448,7 @@ paymentSchema.statics.getPaymentStats = async function(startDate, endDate) {
   ]);
 };
 
-// Instance method to generate receipt number
+// Generate receipt number
 paymentSchema.methods.generateReceiptNumber = function() {
   const date = new Date(this.paymentDate);
   const year = date.getFullYear().toString().slice(-2);

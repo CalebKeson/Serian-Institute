@@ -1,4 +1,5 @@
-// src/services/enrollmentAPI.js
+// frontend/src/services/enrollmentAPI.js - COMPLETE FIXED VERSION
+
 import api from "./api";
 
 export const enrollmentAPI = {
@@ -10,6 +11,8 @@ export const enrollmentAPI = {
         courseId,
         notes,
       });
+
+      console.log("Enroll API response:", response.data);
 
       return {
         success: true,
@@ -70,16 +73,22 @@ export const enrollmentAPI = {
         params: { status },
       });
 
+      console.log("Get course enrollments response:", response.data);
+
+      // Ensure we always return an array
+      const enrollments = response.data.data?.enrollments || response.data.data || [];
+      
       return {
         success: true,
-        data: response.data.data,
-        count: response.data.count,
+        data: enrollments,
+        count: enrollments.length,
+        stats: response.data.data?.stats || null
       };
     } catch (error) {
       console.error("Get course enrollments API error:", error);
       const errorMessage =
         error.response?.data?.message || "Failed to fetch course enrollments";
-      return { success: false, message: errorMessage };
+      return { success: false, message: errorMessage, data: [] };
     }
   },
 
@@ -90,16 +99,21 @@ export const enrollmentAPI = {
         params: { status },
       });
 
+      console.log("Get student enrollments response:", response.data);
+
+      const enrollments = response.data.data?.enrollments || response.data.data || [];
+      
       return {
         success: true,
-        data: response.data.data,
-        count: response.data.count,
+        data: enrollments,
+        count: enrollments.length,
+        admissionNumbers: response.data.data?.admissionNumbers || []
       };
     } catch (error) {
       console.error("Get student enrollments API error:", error);
       const errorMessage =
         error.response?.data?.message || "Failed to fetch student enrollments";
-      return { success: false, message: errorMessage };
+      return { success: false, message: errorMessage, data: [] };
     }
   },
 
@@ -141,7 +155,6 @@ export const enrollmentAPI = {
         data: error.response?.data,
         message: error.message,
         enrollmentId,
-        // data,
       });
 
       const errorMessage =
@@ -166,18 +179,18 @@ export const enrollmentAPI = {
 
       return {
         success: true,
-        data: response.data.data,
-        count: response.data.count,
+        data: response.data.data || [],
+        count: response.data.count || 0,
       };
     } catch (error) {
       console.error("Get available students API error:", error);
       const errorMessage =
         error.response?.data?.message || "Failed to fetch available students";
-      return { success: false, message: errorMessage };
+      return { success: false, message: errorMessage, data: [] };
     }
   },
 
-  // NEW: Get enrollment statistics
+  // Get enrollment statistics
   getEnrollmentStats: async () => {
     try {
       const response = await api.get("/enrollments/stats");
@@ -193,7 +206,7 @@ export const enrollmentAPI = {
     }
   },
 
-  // NEW: Get enrollment count (for sidebar)
+  // Get enrollment count (for sidebar)
   getEnrollmentCount: async () => {
     try {
       const response = await api.get("/enrollments/count");
@@ -204,6 +217,64 @@ export const enrollmentAPI = {
     } catch (error) {
       console.error("Get enrollment count error:", error);
       return { success: false, message: error.message };
+    }
+  },
+
+  // Validate an admission number format and check if it exists
+  validateAdmissionNumber: async (admissionNumber) => {
+    try {
+      const response = await api.get(`/enrollments/validate-admission-number/${admissionNumber}`);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error) {
+      console.error("Validate admission number API error:", error);
+      const errorMessage = error.response?.data?.message || "Failed to validate admission number";
+      return { success: false, message: errorMessage };
+    }
+  },
+
+  // Get enrollment details by admission number
+  getEnrollmentByAdmissionNumber: async (admissionNumber) => {
+    try {
+      const response = await api.get(`/enrollments/admission-number/${admissionNumber}`);
+      return {
+        success: true,
+        data: response.data.data,
+      };
+    } catch (error) {
+      console.error("Get enrollment by admission number API error:", error);
+      const errorMessage = error.response?.data?.message || "Enrollment not found";
+      return { success: false, message: errorMessage };
+    }
+  },
+
+  // Get active enrollment count for sidebar (role-based)
+  getActiveEnrollmentCount: async () => {
+    try {
+      const response = await api.get("/enrollments/count/active");
+      return {
+        success: true,
+        count: response.data.data?.count || 0,
+      };
+    } catch (error) {
+      console.error("Get active enrollment count error:", error);
+      return { success: false, count: 0 };
+    }
+  },
+
+  // Get all admission numbers for a student
+  getStudentAdmissionNumbers: async (studentId) => {
+    try {
+      const response = await api.get(`/enrollments/student/${studentId}/admission-numbers`);
+      return {
+        success: true,
+        data: response.data.data || [],
+      };
+    } catch (error) {
+      console.error("Get student admission numbers error:", error);
+      return { success: false, data: [] };
     }
   }
 };

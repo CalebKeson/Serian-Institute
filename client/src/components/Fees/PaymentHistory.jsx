@@ -1,4 +1,5 @@
-// src/components/Fees/PaymentHistory.jsx
+// src/components/Fees/PaymentHistory.jsx - USING SAME CONFIG AS FEES DASHBOARD
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -24,7 +25,8 @@ import {
   X,
   CheckCircle,
   AlertCircle,
-  Loader
+  Loader,
+  TrendingUp
 } from 'lucide-react';
 import Layout from '../Layout/Layout';
 import { usePaymentStore } from '../../stores/paymentStore';
@@ -39,6 +41,7 @@ import {
 } from '../../utils/feeFormatter';
 import PaymentHistoryTable from './PaymentHistoryTable';
 import ExportButtons from './ExportButtons';
+import { feesDashboardExportConfig } from '../../utils/exportConfigs'; // SAME CONFIG AS FEES DASHBOARD
 import toast from 'react-hot-toast';
 
 const PaymentHistory = () => {
@@ -52,7 +55,11 @@ const PaymentHistory = () => {
     filters,
     setFilters,
     pagination,
-    setPage
+    setPage,
+    paymentStats,
+    fetchPaymentStats,
+    outstandingReport,
+    fetchOutstandingReport
   } = usePaymentStore();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,11 +71,45 @@ const PaymentHistory = () => {
     startDate: '',
     endDate: ''
   });
+  const [exportSummary, setExportSummary] = useState({
+    totalFees: 0,
+    totalCollected: 0,
+    outstandingBalance: 0,
+    totalPayments: 0,
+    collectionRate: 0
+  });
 
-  // Load payments on mount
+  // Load payments and stats on mount
   useEffect(() => {
-    loadPayments();
+    loadData();
   }, []);
+
+  // Update export summary when data loads - SAME as Fees Dashboard
+  useEffect(() => {
+    if (paymentStats && outstandingReport) {
+      const totalCollected = paymentStats?.totalStats?.[0]?.totalAmount || 0;
+      const totalPayments = paymentStats?.totalStats?.[0]?.totalPayments || 0;
+      const outstandingBalance = outstandingReport?.summary?.totalOutstanding || 0;
+      const totalFees = totalCollected + outstandingBalance;
+      const collectionRate = totalFees > 0 ? (totalCollected / totalFees) * 100 : 0;
+      
+      setExportSummary({
+        totalFees,
+        totalCollected,
+        outstandingBalance,
+        totalPayments,
+        collectionRate
+      });
+    }
+  }, [paymentStats, outstandingReport]);
+
+  const loadData = async () => {
+    await Promise.all([
+      fetchPayments({ limit: 100 }),
+      fetchPaymentStats(),
+      fetchOutstandingReport()
+    ]);
+  };
 
   const loadPayments = async (page = 1) => {
     await fetchPayments({
@@ -112,6 +153,7 @@ const PaymentHistory = () => {
   };
 
   const handleRefresh = () => {
+    loadData();
     loadPayments(pagination.current);
     toast.success('Data refreshed');
   };
@@ -161,7 +203,7 @@ const PaymentHistory = () => {
             <div>Official Payment Receipt</div>
           </div>
           
-          <div class="receipt-title">Receipt #${generateReceiptNumber(payment)}</div>
+          <div class="receipt-title">Receipt #${payment.receiptNumber || generateReceiptNumber(payment)}</div>
           
           <div class="details">
             <div class="row">
@@ -170,15 +212,15 @@ const PaymentHistory = () => {
             </div>
             <div class="row">
               <span>Student Name:</span>
-              <span>${payment.student?.user?.name || 'N/A'}</span>
+              <span>${payment.student?.user?.name || payment.studentName || 'N/A'}</span>
             </div>
             <div class="row">
               <span>Student ID:</span>
-              <span>${payment.student?.studentId || 'N/A'}</span>
+              <span>${payment.student?.studentId || payment.studentId || 'N/A'}</span>
             </div>
             <div class="row">
               <span>Course:</span>
-              <span>${payment.course?.name || 'N/A'} (${payment.course?.courseCode || 'N/A'})</span>
+              <span>${payment.course?.name || payment.courseName || 'N/A'}</span>
             </div>
             <div class="row">
               <span>Payment Method:</span>
@@ -192,6 +234,10 @@ const PaymentHistory = () => {
               <span>Reference:</span>
               <span>${payment.paymentReference || 'N/A'}</span>
             </div>
+            <div class="row">
+              <span>Payer Name:</span>
+              <span>${payment.payerName || 'N/A'}</span>
+            </div>
             <div class="row total">
               <span>Amount Paid:</span>
               <span>${formatCurrency(payment.amount)}</span>
@@ -200,12 +246,7 @@ const PaymentHistory = () => {
               <span>Purpose:</span>
               <span>${payment.paymentForDisplay || payment.paymentFor}</span>
             </div>
-            ${payment.notes ? `
-            <div class="row">
-              <span>Notes:</span>
-              <span>${payment.notes}</span>
-            </div>
-            ` : ''}
+            ${payment.notes ? `<div class="row"><span>Notes:</span><span>${payment.notes}</span></div>` : ''}
           </div>
           
           <div class="footer">
@@ -220,7 +261,7 @@ const PaymentHistory = () => {
   };
 
   const handleSendReceipt = (payment) => {
-    toast.success('Receipt sent to student email');
+    toast.success(`Receipt sent to student email: ${payment.student?.user?.email || payment.studentEmail}`);
   };
 
   const clearFilters = () => {
@@ -242,24 +283,32 @@ const PaymentHistory = () => {
     toast.success('Filters cleared');
   };
 
+  // Prepare export data - SAME FORMAT as Fees Dashboard
+  const exportData = (Array.isArray(payments) ? payments : []).map(payment => ({
+    date: new Date(payment.paymentDate).toLocaleDateString(),
+    studentName: payment.student?.user?.name || payment.studentName || 'N/A',
+    studentId: payment.student?.studentId || payment.studentId || 'N/A',
+    course: payment.course?.name || payment.courseName || 'N/A',
+    courseCode: payment.course?.courseCode || payment.courseCode || 'N/A',
+    amount: payment.amount,
+    payerName: payment.payerName || 'N/A',
+    receiptNumber: payment.receiptNumber || 'N/A',
+    reference: payment.transactionId || payment.paymentReference || 'N/A'
+  }));
+
+  const stats = paymentStats?.totalStats?.[0] || {
+    totalAmount: 0,
+    totalPayments: 0,
+    averageAmount: 0
+  };
+  
+  const outstandingTotal = outstandingReport?.summary?.totalOutstanding || 0;
+  const totalCollected = stats.totalAmount;
+  const totalFees = totalCollected + outstandingTotal;
+  const collectionRate = totalFees > 0 ? (totalCollected / totalFees) * 100 : 0;
+
   const activeFilterCount = Object.values(filters).filter(v => v && v !== '' && v !== 1).length +
     (dateRange.startDate ? 1 : 0) + (dateRange.endDate ? 1 : 0);
-
-  // Prepare data for export
-  const exportData = payments.map(payment => ({
-    date: new Date(payment.paymentDate).toLocaleDateString(),
-    studentName: payment.student?.user?.name || 'N/A',
-    studentId: payment.student?.studentId || 'N/A',
-    course: payment.course?.name || 'N/A',
-    courseCode: payment.course?.courseCode || 'N/A',
-    amount: payment.amount,
-    method: payment.paymentMethodDisplay || payment.paymentMethod,
-    purpose: payment.paymentForDisplay || payment.paymentFor,
-    transactionId: payment.transactionId || 'N/A',
-    reference: payment.paymentReference || 'N/A',
-    status: payment.status,
-    notes: payment.notes || ''
-  }));
 
   return (
     <Layout>
@@ -295,30 +344,92 @@ const PaymentHistory = () => {
                 Refresh
               </button>
 
+              {/* USING SAME CONFIG AS FEES DASHBOARD */}
               <ExportButtons
                 data={exportData}
-                filename="payment_history"
+                config={feesDashboardExportConfig}
+                filename="payment_history_report"
                 formats={['csv', 'excel', 'pdf', 'print', 'email']}
-                onExport={handleExport}
                 includeDateRange={true}
-                includeFilters={true}
-                customHeaders={['Date', 'Student', 'Student ID', 'Course', 'Course Code', 'Amount', 'Method', 'Purpose', 'Transaction ID', 'Reference', 'Status', 'Notes']}
                 buttonStyle="default"
-                buttonText="Export"
+                buttonText="Export Report"
+                customSummaryData={exportSummary}
               />
             </div>
           </div>
         </div>
 
-        {/* Search and Filters */}
+        {/* Summary Stats Cards - SAME as Fees Dashboard */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Total Fees</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalFees)}</p>
+              </div>
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <DollarSign className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Total Collected</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(totalCollected)}</p>
+              </div>
+              <div className="p-3 bg-green-100 rounded-lg">
+                <TrendingUp className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Outstanding Balance</p>
+                <p className="text-2xl font-bold text-orange-600">{formatCurrency(outstandingTotal)}</p>
+              </div>
+              <div className="p-3 bg-orange-100 rounded-lg">
+                <AlertCircle className="w-6 h-6 text-orange-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Total Payments</p>
+                <p className="text-2xl font-bold text-blue-600">{stats.totalPayments}</p>
+              </div>
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <CreditCard className="w-6 h-6 text-blue-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Collection Rate</p>
+                <p className="text-2xl font-bold text-purple-600">{Math.round(collectionRate)}%</p>
+              </div>
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <TrendingUp className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Search and Filters - Keep existing */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-          {/* Search Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by transaction ID, reference, or notes..."
+                placeholder="Search by student name, receipt number, or transaction ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 onKeyPress={handleKeyPress}
@@ -369,7 +480,6 @@ const PaymentHistory = () => {
           {showFilters && (
             <div className="mt-4 pt-4 border-t border-gray-200">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Payment Method Filter */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Payment Method
@@ -388,7 +498,6 @@ const PaymentHistory = () => {
                   </select>
                 </div>
 
-                {/* Payment Purpose Filter */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Payment Purpose
@@ -408,7 +517,6 @@ const PaymentHistory = () => {
                   </select>
                 </div>
 
-                {/* Status Filter */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Status
@@ -427,7 +535,6 @@ const PaymentHistory = () => {
                 </div>
               </div>
 
-              {/* Clear Filters Button */}
               {activeFilterCount > 0 && (
                 <div className="mt-4 flex justify-end">
                   <button
@@ -527,44 +634,6 @@ const PaymentHistory = () => {
             </div>
           )}
         </div>
-
-        {/* Summary Cards */}
-        {payments.length > 0 && (
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200 p-4">
-              <p className="text-xs text-green-600 mb-1">Total Amount</p>
-              <p className="text-xl font-bold text-gray-900">
-                {formatCurrency(payments.reduce((sum, p) => sum + p.amount, 0))}
-              </p>
-            </div>
-            
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-4">
-              <p className="text-xs text-blue-600 mb-1">Average Payment</p>
-              <p className="text-xl font-bold text-gray-900">
-                {formatCurrency(payments.reduce((sum, p) => sum + p.amount, 0) / payments.length)}
-              </p>
-            </div>
-            
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg border border-purple-200 p-4">
-              <p className="text-xs text-purple-600 mb-1">Most Used Method</p>
-              <p className="text-xl font-bold text-gray-900">
-                {Object.entries(
-                  payments.reduce((acc, p) => {
-                    acc[p.paymentMethod] = (acc[p.paymentMethod] || 0) + 1;
-                    return acc;
-                  }, {})
-                ).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'}
-              </p>
-            </div>
-            
-            <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-lg border border-orange-200 p-4">
-              <p className="text-xs text-orange-600 mb-1">Largest Payment</p>
-              <p className="text-xl font-bold text-gray-900">
-                {formatCurrency(Math.max(...payments.map(p => p.amount)))}
-              </p>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Receipt Modal */}
@@ -579,7 +648,7 @@ const PaymentHistory = () => {
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">Payment Receipt</h2>
                   <p className="text-sm text-gray-600">
-                    Receipt #{generateReceiptNumber(selectedPayment)}
+                    Receipt #{selectedPayment.receiptNumber || generateReceiptNumber(selectedPayment)}
                   </p>
                 </div>
               </div>
@@ -598,13 +667,13 @@ const PaymentHistory = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">Student</p>
-                  <p className="font-medium text-gray-900">{selectedPayment.student?.user?.name}</p>
-                  <p className="text-xs text-gray-500 mt-1">{selectedPayment.student?.studentId}</p>
+                  <p className="font-medium text-gray-900">{selectedPayment.student?.user?.name || selectedPayment.studentName}</p>
+                  <p className="text-xs text-gray-500 mt-1">{selectedPayment.student?.studentId || selectedPayment.studentId}</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">Course</p>
-                  <p className="font-medium text-gray-900">{selectedPayment.course?.name}</p>
-                  <p className="text-xs text-gray-500 mt-1">{selectedPayment.course?.courseCode}</p>
+                  <p className="font-medium text-gray-900">{selectedPayment.course?.name || selectedPayment.courseName}</p>
+                  <p className="text-xs text-gray-500 mt-1">{selectedPayment.course?.courseCode || selectedPayment.courseCode}</p>
                 </div>
               </div>
 
@@ -632,6 +701,18 @@ const PaymentHistory = () => {
                     <dt className="text-xs text-gray-500">Purpose</dt>
                     <dd className="text-sm font-medium text-gray-900">
                       {selectedPayment.paymentForDisplay}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-gray-500">Payer Name</dt>
+                    <dd className="text-sm font-medium text-gray-900">
+                      {selectedPayment.payerName || 'N/A'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-gray-500">Receipt Number</dt>
+                    <dd className="text-sm font-medium text-gray-900 font-mono">
+                      {selectedPayment.receiptNumber || 'N/A'}
                     </dd>
                   </div>
                   {selectedPayment.transactionId && (

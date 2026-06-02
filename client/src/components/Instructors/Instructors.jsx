@@ -1,4 +1,5 @@
-// frontend/src/pages/Instructors/Instructors.jsx
+// frontend/src/pages/Instructors/Instructors.jsx - COMPLETE WITH EXPORT
+
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
 import {
@@ -11,11 +12,14 @@ import {
   DollarSign,
   Briefcase,
   UserCheck,
-  UserX
+  UserX,
+  Loader
 } from "lucide-react";
 import Layout from "../../components/Layout/Layout";
 import InstructorTable from "../../components/Instructors/InstructorTable";
 import SalaryPaymentModal from "../../components/Instructors/SalaryPaymentModal";
+import ExportButtons from "../../components/Fees/ExportButtons";
+import { instructorExportConfig } from "../../utils/exportConfigs";
 import { useInstructorStore } from "../../stores/instructorStore";
 import { useAuthStore } from "../../stores/authStore";
 import toast from "react-hot-toast";
@@ -40,6 +44,15 @@ const Instructors = () => {
   const [selectedInstructor, setSelectedInstructor] = useState(null);
   const [filterDepartment, setFilterDepartment] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [exportData, setExportData] = useState([]);
+  const [exportSummary, setExportSummary] = useState({
+    totalInstructors: 0,
+    activeInstructors: 0,
+    onLeaveInstructors: 0,
+    departmentsCount: 0,
+    newThisMonth: 0
+  });
+
   const navigate = useNavigate();
 
   // Fetch instructors on component mount
@@ -47,6 +60,47 @@ const Instructors = () => {
     fetchInstructors();
     fetchInstructorStats();
   }, []);
+
+  // Prepare export data when instructors change
+  useEffect(() => {
+    if (instructors.length > 0) {
+      prepareExportData();
+    } else {
+      setExportData([]);
+    }
+  }, [instructors, instructorStats]);
+
+  // Prepare data for export
+  const prepareExportData = () => {
+    // Format instructors for export - only the columns requested
+    const formattedInstructors = instructors.map(instructor => ({
+      instructorName: instructor.user?.name || 'N/A',
+      employeeId: instructor.employeeId || 'N/A',
+      department: instructor.department || 'N/A',
+      email: instructor.user?.email || 'N/A',
+      phone: instructor.phone || 'N/A',
+      bankName: instructor.bankAccount?.bankName || 'Not set',
+      accountNumber: instructor.bankAccount?.accountNumber || 'Not set',
+      salary: instructor.salary || 0
+    }));
+
+    setExportData(formattedInstructors);
+
+    // Calculate summary statistics
+    const totalInstructors = instructorStats?.total || instructors.length;
+    const activeInstructors = instructorStats?.active || instructors.filter(i => i.status === 'active').length;
+    const onLeaveInstructors = instructorStats?.onLeave || instructors.filter(i => i.status === 'on_leave').length;
+    const departmentsCount = instructorStats?.byDepartment?.length || new Set(instructors.map(i => i.department)).size;
+    const newThisMonth = instructorStats?.newThisMonth || 0;
+
+    setExportSummary({
+      totalInstructors,
+      activeInstructors,
+      onLeaveInstructors,
+      departmentsCount,
+      newThisMonth
+    });
+  };
 
   // Handle search with debounce
   useEffect(() => {
@@ -96,9 +150,13 @@ const Instructors = () => {
   };
 
   const handleSalaryPaid = () => {
-    // Refresh instructor list and stats
     fetchInstructors(pagination.current, pagination.limit, searchTerm, filterDepartment, filterStatus);
     fetchInstructorStats();
+  };
+
+  const handleExport = async (format, options) => {
+    toast.success(`Preparing ${format.toUpperCase()} export...`);
+    return { success: true };
   };
 
   const clearFilters = () => {
@@ -106,6 +164,15 @@ const Instructors = () => {
     setFilterStatus("");
     setLocalSearch("");
     fetchInstructors(1, pagination.limit, "", "", "");
+  };
+
+  // Calculate stats for display
+  const displayStats = {
+    total: instructorStats?.total || instructors.length,
+    active: instructorStats?.active || instructors.filter(i => i.status === 'active').length,
+    onLeave: instructorStats?.onLeave || instructors.filter(i => i.status === 'on_leave').length,
+    departments: instructorStats?.byDepartment?.length || new Set(instructors.map(i => i.department)).size,
+    newThisMonth: instructorStats?.newThisMonth || 0
   };
 
   return (
@@ -123,12 +190,25 @@ const Instructors = () => {
             </p>
           </div>
 
-          {user?.role === "admin" && (
-            <div className="mt-4 sm:mt-0 flex space-x-3">
-              <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-sm">
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </button>
+          <div className="mt-4 sm:mt-0 flex space-x-3">
+            {/* Export Button */}
+            <ExportButtons
+              data={exportData}
+              config={instructorExportConfig}
+              filename="instructors_report"
+              formats={['csv', 'excel', 'pdf', 'print', 'email']}
+              includeDateRange={false}
+              buttonStyle="default"
+              buttonText="Export Instructors"
+              customSummaryData={exportSummary}
+            />
+
+            <button className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-sm">
+              <Download className="w-4 h-4 mr-2" />
+              Import
+            </button>
+
+            {user?.role === "admin" && (
               <Link
                 to="/instructors/add"
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 transition-all shadow-sm hover:shadow-md"
@@ -136,8 +216,8 @@ const Instructors = () => {
                 <Plus className="w-4 h-4 mr-2" />
                 Add Instructor
               </Link>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
@@ -151,7 +231,7 @@ const Instructors = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Instructors</p>
               <p className="text-2xl font-bold text-gray-900">
-                {instructorStats?.total || 0}
+                {displayStats.total}
               </p>
             </div>
           </div>
@@ -165,7 +245,7 @@ const Instructors = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Active</p>
               <p className="text-2xl font-bold text-gray-900">
-                {instructorStats?.active || 0}
+                {displayStats.active}
               </p>
             </div>
           </div>
@@ -179,7 +259,7 @@ const Instructors = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">On Leave</p>
               <p className="text-2xl font-bold text-gray-900">
-                {instructorStats?.onLeave || 0}
+                {displayStats.onLeave}
               </p>
             </div>
           </div>
@@ -193,7 +273,7 @@ const Instructors = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Departments</p>
               <p className="text-2xl font-bold text-gray-900">
-                {instructorStats?.byDepartment?.length || 0}
+                {displayStats.departments}
               </p>
             </div>
           </div>
@@ -207,7 +287,7 @@ const Instructors = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">New This Month</p>
               <p className="text-2xl font-bold text-gray-900">
-                {instructorStats?.newThisMonth || 0}
+                {displayStats.newThisMonth}
               </p>
             </div>
           </div>

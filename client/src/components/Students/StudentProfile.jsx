@@ -1,4 +1,5 @@
-// src/pages/Students/StudentProfile.jsx
+// src/pages/Students/StudentProfile.jsx - COMPLETE
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router';
 import { 
@@ -21,18 +22,20 @@ import {
   TrendingUp,
   PieChart,
   Award as GradeIcon,
-  DollarSign // ADD THIS IMPORT
+  DollarSign,
+  Hash
 } from 'lucide-react';
 import Layout from '../../components/Layout/Layout';
 import { useStudentStore } from '../../stores/studentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useEnrollmentStore } from '../../stores/enrollmentStore';
 import { useGradeStore } from '../../stores/gradeStore';
+import { usePaymentStore } from '../../stores/paymentStore';
 import EnrollmentTable from '../../components/Enrollment/EnrollmentTable';
 import StudentAttendanceSummary from '../../components/Attendance/StudentAttendanceSummary';
 import GradeTable from '../../components/Grades/GradeTable';
 import GradeStatistics from '../../components/Grades/GradeStatistics';
-import { formatCurrency } from '../../utils/feeFormatter'; // ADD THIS IMPORT
+import { formatCurrency } from '../../utils/feeFormatter';
 import toast from 'react-hot-toast';
 
 const StudentProfile = () => {
@@ -41,7 +44,7 @@ const StudentProfile = () => {
   const { user } = useAuthStore();
   const { 
     currentStudent, 
-    fetchStudent, 
+    fetchStudentWithEnrollments,
     loading: studentLoading,
     clearCurrentStudent 
   } = useStudentStore();
@@ -60,10 +63,18 @@ const StudentProfile = () => {
     clearGrades
   } = useGradeStore();
 
+  const {
+    studentFeeSummary,
+    fetchStudentFeeSummary,
+    loading: feeLoading
+  } = usePaymentStore();
+
   const [activeTab, setActiveTab] = useState('overview');
   const [refreshKey, setRefreshKey] = useState(0);
-  const [totalFees, setTotalFees] = useState(0); // ADD THIS STATE
-  const [outstandingBalance, setOutstandingBalance] = useState(0); // ADD THIS STATE
+  const [totalFees, setTotalFees] = useState(0);
+  const [outstandingBalance, setOutstandingBalance] = useState(0);
+  const [admissionNumbers, setAdmissionNumbers] = useState([]);
+  const [feeDataLoaded, setFeeDataLoaded] = useState(false);
 
   // Fetch student and enrollment data
   useEffect(() => {
@@ -78,14 +89,54 @@ const StudentProfile = () => {
     };
   }, [id]);
 
-  // Calculate fee totals from enrollments
+  // Fetch fee summary when student is loaded
   useEffect(() => {
-    if (studentEnrollments.length > 0) {
-      // This would ideally come from the fee store
-      // For now, we'll use placeholder or fetch from payment store
-      const total = studentEnrollments.reduce((sum, e) => sum + (e.course?.price || 0), 0);
-      setTotalFees(total);
-      setOutstandingBalance(total * 0.3); // Placeholder - replace with actual data
+    if (id) {
+      fetchStudentFeeSummary(id);
+    }
+  }, [id]);
+
+  // Update fee totals from the actual fee summary
+  useEffect(() => {
+    if (studentFeeSummary) {
+      let summaryData = null;
+      
+      if (studentFeeSummary.summary) {
+        summaryData = studentFeeSummary.summary;
+      } else if (studentFeeSummary.data && studentFeeSummary.data.summary) {
+        summaryData = studentFeeSummary.data.summary;
+      } else if (studentFeeSummary.paymentSummary) {
+        summaryData = studentFeeSummary.paymentSummary;
+      } else if (studentFeeSummary.totalFees !== undefined) {
+        summaryData = studentFeeSummary;
+      }
+      
+      if (summaryData) {
+        setTotalFees(summaryData.totalFees || 0);
+        setOutstandingBalance(summaryData.totalBalance || 0);
+        setFeeDataLoaded(true);
+      }
+    }
+  }, [studentFeeSummary]);
+
+  // Extract admission numbers from enrollments
+  useEffect(() => {
+    const enrollments = Array.isArray(studentEnrollments) ? studentEnrollments : [];
+    
+    if (enrollments.length > 0) {
+      const admissions = enrollments
+        .filter(e => e && e.admissionNumber)
+        .map(e => ({
+          admissionNumber: e.admissionNumber,
+          courseCode: e.course?.courseCode,
+          courseName: e.course?.name,
+          courseId: e.course?._id,
+          enrollmentDate: e.enrollmentDate,
+          status: e.status
+        }));
+      setAdmissionNumbers(admissions);
+    } else {
+      setAdmissionNumbers([]);
     }
   }, [studentEnrollments]);
 
@@ -98,8 +149,9 @@ const StudentProfile = () => {
 
   const loadStudentData = async () => {
     await Promise.all([
-      fetchStudent(id),
-      fetchStudentEnrollments(id)
+      fetchStudentWithEnrollments(id),
+      fetchStudentEnrollments(id),
+      fetchStudentFeeSummary(id)
     ]);
   };
 
@@ -120,7 +172,7 @@ const StudentProfile = () => {
     navigate(`/students/edit/${id}`);
   };
 
-  const handleViewFees = () => { // ADD THIS FUNCTION
+  const handleViewFees = () => {
     navigate(`/fees/student/${id}`);
   };
 
@@ -133,6 +185,7 @@ const StudentProfile = () => {
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -141,6 +194,7 @@ const StudentProfile = () => {
   };
 
   const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -170,11 +224,13 @@ const StudentProfile = () => {
   };
 
   const getEnrollmentStats = () => {
-    const enrolled = studentEnrollments.filter(e => e.status === 'enrolled').length;
-    const completed = studentEnrollments.filter(e => e.status === 'completed').length;
-    const dropped = studentEnrollments.filter(e => e.status === 'dropped').length;
+    const enrollments = Array.isArray(studentEnrollments) ? studentEnrollments : [];
     
-    return { enrolled, completed, dropped, total: studentEnrollments.length };
+    const enrolled = enrollments.filter(e => e && e.status === 'enrolled').length;
+    const completed = enrollments.filter(e => e && e.status === 'completed').length;
+    const dropped = enrollments.filter(e => e && e.status === 'dropped').length;
+    
+    return { enrolled, completed, dropped, total: enrollments.length };
   };
 
   const calculateGPA = () => {
@@ -229,9 +285,11 @@ const StudentProfile = () => {
     );
   }
 
-  const statusConfig = getStatusConfig(currentStudent.status);
+  const statusConfig = getStatusConfig(currentStudent?.status);
   const stats = getEnrollmentStats();
   const gpa = calculateGPA();
+  const enrollmentsArray = Array.isArray(studentEnrollments) ? studentEnrollments : [];
+  const hasEnrollments = enrollmentsArray.length > 0;
 
   return (
     <Layout>
@@ -252,7 +310,7 @@ const StudentProfile = () => {
                   Student Profile
                 </h1>
                 <p className="mt-2 text-gray-600">
-                  Detailed information about {currentStudent.user?.name}
+                  Detailed information about {currentStudent?.user?.name}
                 </p>
               </div>
             </div>
@@ -289,27 +347,40 @@ const StudentProfile = () => {
           </div>
         </div>
 
-        {/* Student Quick Info Bar - UPDATED with Fee Info */}
+        {/* Student Quick Info Bar - WITH STUDENT ID */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
           <div className="flex flex-wrap items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="h-12 w-12 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center">
                 <span className="text-white font-bold text-lg">
-                  {currentStudent.user?.name?.charAt(0).toUpperCase()}
+                  {currentStudent?.user?.name?.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-900">
-                  {currentStudent.user?.name}
+                  {currentStudent?.user?.name}
                 </h2>
-                <div className="flex items-center space-x-3 mt-1">
+                <div className="flex items-center flex-wrap gap-2 mt-1">
+                  {/* Student ID Badge */}
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <Hash className="w-3 h-3 mr-1" />
+                    {currentStudent?.studentId || 'Not assigned'}
+                  </span>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig.color}`}>
                     <statusConfig.icon className="w-3 h-3 mr-1" />
                     {statusConfig.label}
                   </span>
-                  <span className="text-sm text-blue-600 font-medium">
-                    {currentStudent.studentId}
-                  </span>
+                  {hasEnrollments ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <GraduationCap className="w-3 h-3 mr-1" />
+                      Enrolled in {stats.enrolled} course(s)
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      Not Enrolled
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -322,7 +393,6 @@ const StudentProfile = () => {
                 <p className="text-xs text-gray-500">Courses</p>
                 <p className="text-xl font-bold text-blue-600">{stats.enrolled}</p>
               </div>
-              {/* ADDED: Fee Summary */}
               <div className="text-right">
                 <p className="text-xs text-gray-500">Outstanding</p>
                 <p className={`text-xl font-bold ${outstandingBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
@@ -332,6 +402,51 @@ const StudentProfile = () => {
             </div>
           </div>
         </div>
+
+        {/* Admission Numbers Card */}
+        {admissionNumbers.length > 0 && (
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-200 p-4 mb-6">
+            <div className="flex items-start">
+              <Hash className="w-5 h-5 text-purple-600 mt-0.5 mr-3" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-purple-900 mb-2">
+                  Admission Numbers ({admissionNumbers.length})
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {admissionNumbers.map((admission, index) => (
+                    <div
+                      key={index}
+                      className="bg-white rounded-lg px-3 py-2 shadow-sm border border-purple-200 hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => admission.courseId && handleViewCourse(admission.courseId)}
+                    >
+                      <code className="text-sm font-mono font-bold text-purple-700">
+                        {admission.admissionNumber}
+                      </code>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {admission.courseCode} - {admission.courseName?.substring(0, 30)}
+                        {admission.courseName?.length > 30 ? '...' : ''}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        Enrolled: {formatDate(admission.enrollmentDate)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-purple-600 mt-2">
+                  Click on any admission number to view the course details
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Debug: Show fee data status */}
+        {!feeDataLoaded && !feeLoading && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-sm text-yellow-700">
+            <AlertCircle className="w-4 h-4 inline mr-2" />
+            Fee data loading... If this persists, check if payments have been recorded for this student.
+          </div>
+        )}
 
         {/* Tabs Navigation */}
         <div className="mb-6 border-b border-gray-200">
@@ -394,12 +509,11 @@ const StudentProfile = () => {
           </nav>
         </div>
 
-        {/* Tab Content - Keep existing tab content but update Quick Actions Card */}
+        {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Main Content - Keep existing */}
+            {/* Main Content */}
             <div className="lg:col-span-3 space-y-6">
-              {/* ... existing overview content ... */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <User className="w-5 h-5 mr-2 text-blue-600" />
@@ -407,37 +521,36 @@ const StudentProfile = () => {
                 </h2>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Profile Header */}
                   <div className="md:col-span-2 flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
                     <div className="h-16 w-16 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center">
                       <span className="text-white font-bold text-xl">
-                        {currentStudent.user?.name?.charAt(0).toUpperCase()}
+                        {currentStudent?.user?.name?.charAt(0).toUpperCase()}
                       </span>
                     </div>
                     <div>
                       <h3 className="text-xl font-bold text-gray-900">
-                        {currentStudent.user?.name}
+                        {currentStudent?.user?.name}
                       </h3>
-                      <div className="flex items-center space-x-4 mt-1">
+                      <div className="flex items-center space-x-4 mt-1 flex-wrap gap-2">
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusConfig.color}`}>
                           <statusConfig.icon className="w-4 h-4 mr-1" />
                           {statusConfig.label}
                         </span>
-                        <span className="text-sm text-blue-600 font-medium bg-blue-50 px-3 py-1 rounded-full">
-                          {currentStudent.studentId}
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                          <Hash className="w-4 h-4 mr-1" />
+                          ID: {currentStudent?.studentId || 'Not assigned'}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Basic Information */}
                   <div>
                     <label className="block text-sm font-medium text-gray-500 mb-1">
                       Email Address
                     </label>
                     <div className="flex items-center text-gray-900">
                       <Mail className="w-4 h-4 mr-2 text-blue-500" />
-                      {currentStudent.user?.email}
+                      {currentStudent?.user?.email}
                     </div>
                   </div>
 
@@ -447,7 +560,7 @@ const StudentProfile = () => {
                     </label>
                     <div className="flex items-center text-gray-900">
                       <Phone className="w-4 h-4 mr-2 text-blue-500" />
-                      {currentStudent.phone}
+                      {currentStudent?.phone}
                     </div>
                   </div>
 
@@ -457,7 +570,7 @@ const StudentProfile = () => {
                     </label>
                     <div className="flex items-center text-gray-900">
                       <Calendar className="w-4 h-4 mr-2 text-blue-500" />
-                      {formatDate(currentStudent.dateOfBirth)}
+                      {formatDate(currentStudent?.dateOfBirth)}
                     </div>
                   </div>
 
@@ -467,7 +580,7 @@ const StudentProfile = () => {
                     </label>
                     <div className="flex items-center text-gray-900">
                       <User className="w-4 h-4 mr-2 text-blue-500" />
-                      {getGenderLabel(currentStudent.gender)}
+                      {getGenderLabel(currentStudent?.gender)}
                     </div>
                   </div>
 
@@ -477,7 +590,7 @@ const StudentProfile = () => {
                     </label>
                     <div className="flex items-center text-gray-900">
                       <Clock className="w-4 h-4 mr-2 text-blue-500" />
-                      {formatDate(currentStudent.enrollmentDate)}
+                      {formatDate(currentStudent?.enrollmentDate)}
                     </div>
                   </div>
 
@@ -487,7 +600,7 @@ const StudentProfile = () => {
                     </label>
                     <div className="flex items-center text-gray-900">
                       <Shield className="w-4 h-4 mr-2 text-blue-500" />
-                      {formatDateTime(currentStudent.createdAt)}
+                      {formatDateTime(currentStudent?.createdAt)}
                     </div>
                   </div>
                 </div>
@@ -504,9 +617,9 @@ const StudentProfile = () => {
                   <div className="flex items-start">
                     <MapPin className="w-5 h-5 mr-3 text-blue-500 mt-0.5" />
                     <div>
-                      <p className="font-medium text-gray-900">{currentStudent.address?.street}</p>
+                      <p className="font-medium text-gray-900">{currentStudent?.address?.street}</p>
                       <p className="text-gray-600">
-                        {currentStudent.address?.city}, {currentStudent.address?.state} {currentStudent.address?.zipCode}
+                        {currentStudent?.address?.city}, {currentStudent?.address?.state} {currentStudent?.address?.zipCode}
                       </p>
                     </div>
                   </div>
@@ -526,7 +639,7 @@ const StudentProfile = () => {
                       Contact Name
                     </label>
                     <p className="text-gray-900 font-medium">
-                      {currentStudent.emergencyContact?.name}
+                      {currentStudent?.emergencyContact?.name}
                     </p>
                   </div>
 
@@ -535,7 +648,7 @@ const StudentProfile = () => {
                       Relationship
                     </label>
                     <p className="text-gray-900 font-medium">
-                      {currentStudent.emergencyContact?.relationship}
+                      {currentStudent?.emergencyContact?.relationship}
                     </p>
                   </div>
 
@@ -545,14 +658,14 @@ const StudentProfile = () => {
                     </label>
                     <div className="flex items-center text-gray-900">
                       <Phone className="w-4 h-4 mr-2 text-blue-500" />
-                      {currentStudent.emergencyContact?.phone}
+                      {currentStudent?.emergencyContact?.phone}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Sidebar - UPDATED with Fee Actions */}
+            {/* Sidebar */}
             <div className="space-y-6">
               {/* Quick Stats Card */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -561,6 +674,13 @@ const StudentProfile = () => {
                 </h3>
                 
                 <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-500">Student ID</span>
+                    <span className="text-sm font-bold text-blue-600 font-mono">
+                      {currentStudent?.studentId || 'Not assigned'}
+                    </span>
+                  </div>
+                  
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">Status</span>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig.color}`}>
@@ -571,14 +691,14 @@ const StudentProfile = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">Student Since</span>
                     <span className="text-sm font-medium text-gray-900">
-                      {formatDate(currentStudent.enrollmentDate)}
+                      {formatDate(currentStudent?.enrollmentDate)}
                     </span>
                   </div>
                   
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">Enrollment Length</span>
                     <span className="text-sm font-medium text-gray-900">
-                      {Math.floor((new Date() - new Date(currentStudent.enrollmentDate)) / (1000 * 60 * 60 * 24))} days
+                      {Math.floor((new Date() - new Date(currentStudent?.enrollmentDate)) / (1000 * 60 * 60 * 24))} days
                     </span>
                   </div>
                   
@@ -597,8 +717,14 @@ const StudentProfile = () => {
                     <span className="text-sm font-medium text-purple-600">{gpa}</span>
                   </div>
 
-                  {/* ADDED: Fee Summary in Sidebar */}
                   <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                    <span className="text-sm text-gray-500">Admission Numbers</span>
+                    <span className="text-sm font-bold text-purple-600">
+                      {admissionNumbers.length}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">Total Fees</span>
                     <span className="text-sm font-medium text-gray-900">{formatCurrency(totalFees)}</span>
                   </div>
@@ -612,13 +738,13 @@ const StudentProfile = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-500">Last Updated</span>
                     <span className="text-sm font-medium text-gray-900">
-                      {formatDateTime(currentStudent.updatedAt)}
+                      {formatDateTime(currentStudent?.updatedAt)}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Quick Actions Card - UPDATED with Fee Button */}
+              {/* Quick Actions Card */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
                   Quick Actions
@@ -641,7 +767,6 @@ const StudentProfile = () => {
                     View Grades
                   </button>
 
-                  {/* ADDED: View Fees Button */}
                   {['admin', 'receptionist'].includes(user?.role) && (
                     <button
                       onClick={handleViewFees}
@@ -677,35 +802,30 @@ const StudentProfile = () => {
                 
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Student ID</span>
-                    <span className="font-medium text-gray-900">{currentStudent.studentId}</span>
-                  </div>
-                  
-                  <div className="flex justify-between">
                     <span className="text-gray-500">Database ID</span>
-                    <span className="font-medium text-gray-900 truncate ml-2" title={currentStudent._id}>
-                      {currentStudent._id.substring(0, 8)}...
+                    <span className="font-medium text-gray-900 truncate ml-2" title={currentStudent?._id}>
+                      {currentStudent?._id?.substring(0, 8)}...
                     </span>
                   </div>
                   
                   <div className="flex justify-between">
                     <span className="text-gray-500">User ID</span>
-                    <span className="font-medium text-gray-900 truncate ml-2" title={currentStudent.user?._id}>
-                      {currentStudent.user?._id?.substring(0, 8)}...
+                    <span className="font-medium text-gray-900 truncate ml-2" title={currentStudent?.user?._id}>
+                      {currentStudent?.user?._id?.substring(0, 8)}...
                     </span>
                   </div>
                   
                   <div className="flex justify-between">
                     <span className="text-gray-500">Created</span>
                     <span className="font-medium text-gray-900">
-                      {formatDate(currentStudent.createdAt)}
+                      {formatDate(currentStudent?.createdAt)}
                     </span>
                   </div>
                   
                   <div className="flex justify-between">
                     <span className="text-gray-500">Last Updated</span>
                     <span className="font-medium text-gray-900">
-                      {formatDate(currentStudent.updatedAt)}
+                      {formatDate(currentStudent?.updatedAt)}
                     </span>
                   </div>
                 </div>
@@ -714,7 +834,7 @@ const StudentProfile = () => {
           </div>
         )}
 
-        {/* Rest of the tabs remain the same */}
+        {/* Enrollments Tab */}
         {activeTab === 'enrollments' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex justify-between items-center mb-6">
@@ -741,7 +861,7 @@ const StudentProfile = () => {
               onViewCourse={handleViewCourse}
             />
 
-            {studentEnrollments.length === 0 && !enrollmentsLoading && (
+            {(!studentEnrollments || studentEnrollments.length === 0) && !enrollmentsLoading && (
               <div className="text-center py-8">
                 <BookOpen className="mx-auto h-12 w-12 text-gray-400" />
                 <h4 className="mt-2 text-sm font-medium text-gray-900">No course enrollments</h4>
@@ -762,6 +882,7 @@ const StudentProfile = () => {
           </div>
         )}
 
+        {/* Attendance Tab */}
         {activeTab === 'attendance' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <StudentAttendanceSummary 
@@ -771,20 +892,18 @@ const StudentProfile = () => {
           </div>
         )}
 
+        {/* Grades Tab */}
         {activeTab === 'grades' && (
           <div className="space-y-6">
-            {/* Grades Overview Card */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                   <GradeIcon className="w-5 h-5 mr-2 text-blue-600" />
                   Student Grades
                 </h3>
-                <div className="flex items-center space-x-4">
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">Overall GPA</p>
-                    <p className="text-2xl font-bold text-purple-600">{gpa}</p>
-                  </div>
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">Overall GPA</p>
+                  <p className="text-2xl font-bold text-purple-600">{gpa}</p>
                 </div>
               </div>
 
@@ -798,7 +917,7 @@ const StudentProfile = () => {
                 showFilters={true}
               />
 
-              {studentGrades.length === 0 && !gradesLoading && (
+              {(!studentGrades || studentGrades.length === 0) && !gradesLoading && (
                 <div className="text-center py-12">
                   <GradeIcon className="mx-auto h-12 w-12 text-gray-400" />
                   <h4 className="mt-2 text-sm font-medium text-gray-900">No grades available</h4>
@@ -809,7 +928,7 @@ const StudentProfile = () => {
               )}
             </div>
 
-            {studentGrades.length > 0 && (
+            {studentGrades && studentGrades.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                   <TrendingUp className="w-5 h-5 mr-2 text-blue-600" />
@@ -821,6 +940,7 @@ const StudentProfile = () => {
           </div>
         )}
 
+        {/* Analytics Tab */}
         {activeTab === 'analytics' && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6 flex items-center">

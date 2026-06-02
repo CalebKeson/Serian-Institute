@@ -1,3 +1,5 @@
+// src/pages/Courses/CourseEnrollments.jsx - COMPLETE FIXED VERSION
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { 
@@ -12,7 +14,9 @@ import {
   Award,
   Loader,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Hash,
+  GraduationCap
 } from 'lucide-react';
 import Layout from '../../components/Layout/Layout';
 import { useCourseStore } from '../../stores/courseStore';
@@ -45,7 +49,6 @@ const CourseEnrollments = () => {
     clearEnrollments
   } = useEnrollmentStore();
 
-  // CHANGED: Default tab to 'all' instead of 'enrolled'
   const [activeView, setActiveView] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,7 +78,6 @@ const CourseEnrollments = () => {
   const loadInitialData = async () => {
     setRefreshing(true);
     try {
-      // Load both course and enrollments in parallel
       await Promise.all([
         fetchCourse(id),
         fetchCourseEnrollments(id, activeView === 'all' ? '' : activeView)
@@ -94,7 +96,6 @@ const CourseEnrollments = () => {
     await fetchCourseEnrollments(id, status);
   };
 
-  // Search available students when modal is open
   useEffect(() => {
     if (showAddModal && searchTerm !== undefined) {
       const timer = setTimeout(() => {
@@ -133,13 +134,16 @@ const CourseEnrollments = () => {
         setSearchTerm('');
         clearAvailableStudents();
         
-        // Refresh data
         await Promise.all([
           fetchCourse(id),
           fetchCourseEnrollments(id, activeView === 'all' ? '' : activeView)
         ]);
         
-        toast.success(result.message || 'Student enrolled successfully!');
+        const admissionNumber = result.data?.admissionNumber;
+        const successMsg = admissionNumber 
+          ? `Student enrolled successfully! Admission Number: ${admissionNumber}`
+          : 'Student enrolled successfully!';
+        toast.success(successMsg);
       }
     } catch (error) {
       console.error('Enroll error:', error);
@@ -158,7 +162,6 @@ const CourseEnrollments = () => {
       const result = await removeStudent(id, studentId);
       
       if (result.success) {
-        // Refresh data
         await Promise.all([
           fetchCourse(id),
           fetchCourseEnrollments(id, activeView === 'all' ? '' : activeView)
@@ -177,7 +180,6 @@ const CourseEnrollments = () => {
       const result = await updateEnrollment(enrollmentId, data);
       
       if (result.success) {
-        // Refresh data
         await Promise.all([
           fetchCourse(id),
           fetchCourseEnrollments(id, activeView === 'all' ? '' : activeView)
@@ -192,19 +194,22 @@ const CourseEnrollments = () => {
   };
 
   const handleExportEnrollments = () => {
-    if (courseEnrollments.length === 0) {
+    // FIXED: Ensure courseEnrollments is an array
+    const enrollmentsArray = Array.isArray(courseEnrollments) ? courseEnrollments : [];
+    
+    if (enrollmentsArray.length === 0) {
       toast.error('No enrollments to export');
       return;
     }
 
-    const headers = ['Student ID', 'Name', 'Email', 'Enrollment Date', 'Status', 'Grade'];
-    const csvData = courseEnrollments.map(enrollment => [
-      enrollment.student?.studentId || '',
+    const headers = ['Admission Number', 'Student Name', 'Email', 'Enrollment Date', 'Status', 'Grade'];
+    const csvData = enrollmentsArray.map(enrollment => [
+      enrollment.admissionNumber || 'Not assigned',
       enrollment.student?.user?.name || '',
       enrollment.student?.user?.email || '',
       new Date(enrollment.enrollmentDate).toLocaleDateString(),
       enrollment.status,
-      enrollment.grade || 'Not Graded' // CHANGED: Default for export
+      enrollment.grade || 'Not Graded'
     ]);
 
     const csvContent = [headers, ...csvData]
@@ -222,16 +227,24 @@ const CourseEnrollments = () => {
     toast.success('Enrollments exported successfully!');
   };
 
-  // Calculate stats from enrollments
+  // FIXED: Calculate stats from enrollments with array check
   const getEnrollmentStats = () => {
-    const enrolled = courseEnrollments.filter(e => e.status === 'enrolled').length;
-    const dropped = courseEnrollments.filter(e => e.status === 'dropped').length;
-    const completed = courseEnrollments.filter(e => e.status === 'completed').length;
+    const enrollmentsArray = Array.isArray(courseEnrollments) ? courseEnrollments : [];
+    
+    const enrolled = enrollmentsArray.filter(e => e && e.status === 'enrolled').length;
+    const dropped = enrollmentsArray.filter(e => e && e.status === 'dropped').length;
+    const completed = enrollmentsArray.filter(e => e && e.status === 'completed').length;
+    
+    const withAdmissionNumber = enrollmentsArray.filter(e => e && e.admissionNumber).length;
+    const withoutAdmissionNumber = enrollmentsArray.filter(e => e && !e.admissionNumber).length;
+    
     return {
       enrolled,
       dropped,
       completed,
-      total: courseEnrollments.length
+      total: enrollmentsArray.length,
+      withAdmissionNumber,
+      withoutAdmissionNumber
     };
   };
 
@@ -277,6 +290,9 @@ const CourseEnrollments = () => {
     );
   }
 
+  // FIXED: Get enrollments array for rendering
+  const enrollmentsArray = Array.isArray(courseEnrollments) ? courseEnrollments : [];
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -313,7 +329,7 @@ const CourseEnrollments = () => {
               
               <button
                 onClick={handleExportEnrollments}
-                disabled={courseEnrollments.length === 0}
+                disabled={enrollmentsArray.length === 0}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Download className="w-4 h-4 mr-2" />
@@ -334,7 +350,7 @@ const CourseEnrollments = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -374,11 +390,28 @@ const CourseEnrollments = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div>
+                <p className="text-sm font-medium text-gray-600">Admission Numbers Issued</p>
+                <p className="text-2xl font-bold text-purple-600 mt-2">{stats.withAdmissionNumber}</p>
+                {stats.withoutAdmissionNumber > 0 && (
+                  <p className="text-xs text-orange-500 mt-1">
+                    {stats.withoutAdmissionNumber} pending
+                  </p>
+                )}
+              </div>
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <Hash className="w-6 h-6 text-purple-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm font-medium text-gray-600">Available Spots</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">{availableSpots}</p>
               </div>
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Users className="w-6 h-6 text-purple-600" />
+              <div className="p-3 bg-orange-100 rounded-lg">
+                <Users className="w-6 h-6 text-orange-600" />
               </div>
             </div>
           </div>
@@ -400,7 +433,7 @@ const CourseEnrollments = () => {
           </div>
         )}
 
-        {/* CHANGED: View Toggles - New order: All, Enrolled, Completed, Dropped */}
+        {/* View Toggles */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
           <div className="flex items-center space-x-2">
             <button
@@ -446,10 +479,26 @@ const CourseEnrollments = () => {
           </div>
         </div>
 
+        {/* Info Box about Admission Numbers */}
+        {stats.withoutAdmissionNumber > 0 && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <div className="flex items-center">
+              <GraduationCap className="w-5 h-5 text-blue-600 mr-3" />
+              <div>
+                <h4 className="text-sm font-medium text-blue-800">About Admission Numbers</h4>
+                <p className="text-sm text-blue-700 mt-1">
+                  Admission numbers are automatically generated when a student is enrolled in this course.
+                  Format: {currentCourse?.courseCode}/XXX/YY (e.g., {currentCourse?.courseCode}/001/{new Date().getFullYear().toString().slice(-2)})
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Enrollment Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <EnrollmentTable
-            enrollments={courseEnrollments}
+            enrollments={enrollmentsArray}
             loading={enrollmentsLoading || refreshing}
             onRemoveStudent={handleRemoveStudent}
             onUpdateEnrollment={handleUpdateStatus}
@@ -487,7 +536,7 @@ const CourseEnrollments = () => {
                       ? Math.min(100, (stats.enrolled / currentCourse.maxStudents) * 100) 
                       : 0}%` 
                   }}
-                ></div>
+                />
               </div>
             </div>
           </div>

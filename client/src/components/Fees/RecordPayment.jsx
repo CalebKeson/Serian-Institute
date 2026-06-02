@@ -1,4 +1,5 @@
-// src/components/Fees/RecordPayment.jsx
+// src/components/Fees/RecordPayment.jsx - COMPLETE FIXED VERSION
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
@@ -19,7 +20,11 @@ import {
   Receipt,
   Hash,
   Mail,
-  Phone
+  Phone,
+  Users,
+  Info,
+  TrendingDown,
+  AlertTriangle
 } from 'lucide-react';
 import Layout from '../Layout/Layout';
 import { usePaymentStore } from '../../stores/paymentStore';
@@ -27,7 +32,7 @@ import { useStudentStore } from '../../stores/studentStore';
 import { useCourseStore } from '../../stores/courseStore';
 import { useEnrollmentStore } from '../../stores/enrollmentStore';
 import { useAuthStore } from '../../stores/authStore';
-import { formatCurrency, getPaymentMethodInfo } from '../../utils/feeFormatter';
+import { formatCurrency, getFeeStatusBadge } from '../../utils/feeFormatter';
 import toast from 'react-hot-toast';
 
 const RecordPayment = () => {
@@ -38,34 +43,52 @@ const RecordPayment = () => {
   const { fetchStudentWithEnrollments } = useStudentStore();
   const { courses, fetchCourses, loading: coursesLoading } = useCourseStore();
   const { enrollStudent } = useEnrollmentStore();
-  const { recordPayment, loading: paymentLoading } = usePaymentStore();
+  const { recordPayment, loading: paymentLoading, fetchStudentFeeSummary } = usePaymentStore();
 
   // Get URL parameters
   const urlStudentId = searchParams.get('studentId');
   const urlCourseId = searchParams.get('courseId');
 
   // Form state
-  const [step, setStep] = useState(1); // 1: Select Student, 2: Select Course, 3: Payment Details
+  const [step, setStep] = useState(1);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [courseFeeDetails, setCourseFeeDetails] = useState(null);
+  const [studentFeeData, setStudentFeeData] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [courseSearchTerm, setCourseSearchTerm] = useState('');
-  const [showStudentDropdown, setShowStudentDropdown] = useState(false); // ADDED
-  const [showCourseDropdown, setShowCourseDropdown] = useState(false); // ADDED
+  const [showStudentDropdown, setShowStudentDropdown] = useState(false);
+  const [showCourseDropdown, setShowCourseDropdown] = useState(false);
   const [formData, setFormData] = useState({
     amount: '',
     paymentMethod: 'mpesa',
     transactionId: '',
     paymentReference: '',
+    receiptNumber: '', // REMOVED auto-generation
     paymentFor: 'tuition',
     paymentDate: new Date().toISOString().split('T')[0],
-    notes: ''
+    notes: '',
+    payerName: '',
+    payerRelationship: 'self',
+    payerContact: '',
+    payerNotes: ''
   });
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isStudentEnrolled, setIsStudentEnrolled] = useState(false);
+  const [fetchingEnrollments, setFetchingEnrollments] = useState(false);
+  const [fetchingFeeData, setFetchingFeeData] = useState(false);
+
+  const payerRelationships = [
+    { value: 'self', label: 'Self (Student)' },
+    { value: 'parent', label: 'Parent' },
+    { value: 'guardian', label: 'Guardian' },
+    { value: 'sponsor', label: 'Sponsor' },
+    { value: 'employer', label: 'Employer' },
+    { value: 'other', label: 'Other' }
+  ];
 
   // Load students and courses on mount
   useEffect(() => {
@@ -85,44 +108,70 @@ const RecordPayment = () => {
     loadData();
   }, []);
 
+  // FIXED: Load student fee summary when a student is selected
+  useEffect(() => {
+    const loadStudentFees = async () => {
+      if (selectedStudent && selectedStudent._id) {
+        setFetchingFeeData(true);
+        try {
+          console.log('Fetching fee summary for student:', selectedStudent._id);
+          const result = await fetchStudentFeeSummary(selectedStudent._id);
+          console.log('Fee summary result:', result);
+          
+          if (result.success && result.data) {
+            setStudentFeeData(result.data);
+            console.log('Student fee data set:', result.data);
+          }
+        } catch (error) {
+          console.error('Error loading student fee summary:', error);
+        } finally {
+          setFetchingFeeData(false);
+        }
+      }
+    };
+    
+    if (selectedStudent) {
+      loadStudentFees();
+    }
+  }, [selectedStudent]);
+
   // Handle URL parameters to pre-select student and course
   useEffect(() => {
     if (!dataLoaded) return;
 
     const preSelectFromUrl = async () => {
-      // Pre-select student from URL
       if (urlStudentId && students.length > 0) {
         const student = students.find(s => 
           s._id === urlStudentId || s.studentId === urlStudentId
         );
         
         if (student) {
-          // Fetch student with enrollments
-          const result = await fetchStudentWithEnrollments(student._id);
-          if (result.success && result.data) {
-            setSelectedStudent(result.data);
-            
-            if (urlCourseId) {
-              const course = courses.find(c => c._id === urlCourseId);
-              if (course) {
-                setSelectedCourse(course);
-                setFormData(prev => ({ ...prev, amount: course.price || '' }));
-                setStep(3);
+          setFetchingEnrollments(true);
+          try {
+            const result = await fetchStudentWithEnrollments(student._id);
+            if (result.success && result.data) {
+              setSelectedStudent(result.data);
+              
+              if (urlCourseId) {
+                const course = courses.find(c => c._id === urlCourseId);
+                if (course) {
+                  await handleCourseSelection(course, result.data);
+                  setStep(3);
+                } else {
+                  setStep(2);
+                }
               } else {
                 setStep(2);
               }
-            } else {
-              setStep(2);
             }
+          } finally {
+            setFetchingEnrollments(false);
           }
         }
-      } 
-      // Pre-select course only from URL
-      else if (urlCourseId && courses.length > 0) {
+      } else if (urlCourseId && courses.length > 0) {
         const course = courses.find(c => c._id === urlCourseId);
         if (course) {
           setSelectedCourse(course);
-          setFormData(prev => ({ ...prev, amount: course.price || '' }));
           setStep(2);
         }
       }
@@ -131,84 +180,138 @@ const RecordPayment = () => {
     preSelectFromUrl();
   }, [urlStudentId, urlCourseId, students, courses, dataLoaded]);
 
-  // Check enrollment status whenever selectedStudent or selectedCourse changes
+  // Check enrollment status
   useEffect(() => {
     if (selectedStudent && selectedCourse) {
-      // Check if student is enrolled in this course
       const isEnrolled = selectedStudent.enrollments?.some(
         e => e.course === selectedCourse._id || e.courseId === selectedCourse._id
       );
       setIsStudentEnrolled(!!isEnrolled);
-      console.log('Enrollment check:', { 
-        student: selectedStudent.user?.name,
-        course: selectedCourse.courseCode,
-        isEnrolled,
-        enrollments: selectedStudent.enrollments 
-      });
     } else {
       setIsStudentEnrolled(false);
     }
   }, [selectedStudent, selectedCourse]);
 
-  // Filter students based on search
-  const filteredStudents = students.filter(student => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      student.user?.name?.toLowerCase().includes(searchLower) ||
-      student.studentId?.toLowerCase().includes(searchLower) ||
-      student.user?.email?.toLowerCase().includes(searchLower)
-    );
-  });
-
-  // Filter courses based on search
-  const filteredCourses = courses.filter(course => {
-    if (!courseSearchTerm) return true;
-    const searchLower = courseSearchTerm.toLowerCase();
-    return (
-      course.name?.toLowerCase().includes(searchLower) ||
-      course.courseCode?.toLowerCase().includes(searchLower)
-    );
-  });
-
-  const handleBack = () => {
-    if (step > 1) {
-      setStep(step - 1);
-    } else {
-      navigate('/fees');
+  // FIXED: Handle course selection - properly get outstanding balance
+  const handleCourseSelection = async (course, student) => {
+    setSelectedCourse(course);
+    
+    // Fetch fee details for this student and course
+    try {
+      // First try to get from already loaded studentFeeData
+      let courseFee = null;
+      let outstandingAmount = course.price || 0;
+      let paidAmount = 0;
+      
+      if (studentFeeData) {
+        // Check different possible structures
+        if (studentFeeData.paymentSummary?.courses) {
+          courseFee = studentFeeData.paymentSummary.courses.find(
+            c => c.courseId === course._id || c.courseCode === course.courseCode
+          );
+        } else if (studentFeeData.outstandingBalances) {
+          courseFee = studentFeeData.outstandingBalances.find(
+            c => c.courseId === course._id || c.courseCode === course.courseCode
+          );
+        } else if (studentFeeData.courses) {
+          courseFee = studentFeeData.courses.find(
+            c => c.courseId === course._id || c.courseCode === course.courseCode
+          );
+        }
+        
+        if (courseFee) {
+          paidAmount = courseFee.paid || courseFee.totalPaid || 0;
+          outstandingAmount = courseFee.balance || courseFee.remainingBalance || course.price;
+          console.log('Found course fee data:', { paidAmount, outstandingAmount });
+        }
+      }
+      
+      // If not found in cached data, fetch directly
+      if (!courseFee && student?._id) {
+        const result = await fetchStudentFeeSummary(student._id);
+        if (result.success && result.data) {
+          setStudentFeeData(result.data);
+          
+          if (result.data.paymentSummary?.courses) {
+            courseFee = result.data.paymentSummary.courses.find(
+              c => c.courseId === course._id || c.courseCode === course.courseCode
+            );
+          } else if (result.data.outstandingBalances) {
+            courseFee = result.data.outstandingBalances.find(
+              c => c.courseId === course._id || c.courseCode === course.courseCode
+            );
+          }
+          
+          if (courseFee) {
+            paidAmount = courseFee.paid || courseFee.totalPaid || 0;
+            outstandingAmount = courseFee.balance || courseFee.remainingBalance || course.price;
+          }
+        }
+      }
+      
+      setCourseFeeDetails({
+        courseId: course._id,
+        courseCode: course.courseCode,
+        courseName: course.name,
+        price: course.price,
+        paid: paidAmount,
+        balance: outstandingAmount,
+        percentage: course.price > 0 ? (paidAmount / course.price) * 100 : 0,
+        status: outstandingAmount === 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid'
+      });
+      
+      // FIXED: Auto-populate amount with outstanding balance
+      setFormData(prev => ({ 
+        ...prev, 
+        amount: outstandingAmount > 0 ? outstandingAmount.toString() : '0'
+      }));
+      
+    } catch (error) {
+      console.error('Error fetching fee details:', error);
+      setCourseFeeDetails({
+        courseId: course._id,
+        courseCode: course.courseCode,
+        courseName: course.name,
+        price: course.price,
+        paid: 0,
+        balance: course.price,
+        percentage: 0,
+        status: 'unpaid'
+      });
+      setFormData(prev => ({ ...prev, amount: course.price?.toString() || '' }));
     }
   };
 
   const handleSelectStudent = async (student) => {
-    // First set the basic student info
     setSelectedStudent(student);
-    setSearchTerm(''); // Fixed: was setStudentSearch
+    setSearchTerm('');
     setShowStudentDropdown(false);
     
-    // Then fetch full student data with enrollments
+    setFetchingEnrollments(true);
     try {
       const result = await fetchStudentWithEnrollments(student._id);
       if (result.success && result.data) {
-        // Update selectedStudent with the enriched data
         setSelectedStudent(result.data);
       }
     } catch (error) {
       console.error('Error fetching student enrollments:', error);
+      toast.error('Failed to fetch student enrollments');
+    } finally {
+      setFetchingEnrollments(false);
     }
     
-    // Move to next step
     if (selectedCourse) {
+      await handleCourseSelection(selectedCourse, student);
       setStep(3);
     } else {
       setStep(2);
     }
   };
 
-  const handleSelectCourse = (course) => {
-    setSelectedCourse(course);
+  const handleSelectCourse = async (course) => {
+    await handleCourseSelection(course, selectedStudent);
     setCourseSearchTerm('');
     setShowCourseDropdown(false);
-    setFormData(prev => ({ ...prev, amount: course.price || '' }));
     setStep(3);
   };
 
@@ -219,7 +322,6 @@ const RecordPayment = () => {
       [name]: value
     }));
 
-    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -231,37 +333,21 @@ const RecordPayment = () => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!selectedStudent) {
-      newErrors.student = 'Please select a student';
-    }
-
-    if (!selectedCourse) {
-      newErrors.course = 'Please select a course';
-    }
-
-    if (!formData.amount || parseFloat(formData.amount) <= 0) {
-      newErrors.amount = 'Please enter a valid amount';
-    }
-
-    if (!formData.paymentMethod) {
-      newErrors.paymentMethod = 'Payment method is required';
-    }
-
+    if (!selectedStudent) newErrors.student = 'Please select a student';
+    if (!selectedCourse) newErrors.course = 'Please select a course';
+    if (!formData.amount || parseFloat(formData.amount) <= 0) newErrors.amount = 'Please enter a valid amount';
+    if (!formData.paymentMethod) newErrors.paymentMethod = 'Payment method is required';
+    if (!formData.receiptNumber) newErrors.receiptNumber = 'Receipt number is required';
+    if (!formData.payerName || !formData.payerName.trim()) newErrors.payerName = 'Payer name is required';
+    
     if (formData.paymentMethod === 'mpesa' && !formData.transactionId) {
       newErrors.transactionId = 'M-Pesa transaction ID is required';
     }
-
     if (['cooperative_bank', 'family_bank'].includes(formData.paymentMethod) && !formData.transactionId) {
       newErrors.transactionId = 'Bank reference number is required';
     }
-
-    if (!formData.paymentFor) {
-      newErrors.paymentFor = 'Payment purpose is required';
-    }
-
-    if (!formData.paymentDate) {
-      newErrors.paymentDate = 'Payment date is required';
-    }
+    if (!formData.paymentFor) newErrors.paymentFor = 'Payment purpose is required';
+    if (!formData.paymentDate) newErrors.paymentDate = 'Payment date is required';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -285,15 +371,27 @@ const RecordPayment = () => {
         paymentMethod: formData.paymentMethod,
         transactionId: formData.transactionId || undefined,
         paymentReference: formData.paymentReference || undefined,
+        receiptNumber: formData.receiptNumber.toUpperCase().trim(),
         paymentFor: formData.paymentFor,
         paymentDate: formData.paymentDate,
-        notes: formData.notes || undefined
+        notes: formData.notes || undefined,
+        payerName: formData.payerName.trim(),
+        payerRelationship: formData.payerRelationship,
+        payerContact: formData.payerContact || undefined,
+        payerNotes: formData.payerNotes || undefined
       };
 
       const result = await recordPayment(paymentData);
 
       if (result.success) {
-        toast.success('Payment recorded successfully!');
+        const remainingBalance = (courseFeeDetails?.balance || selectedCourse.price) - parseFloat(formData.amount);
+        if (remainingBalance > 0) {
+          toast.success(`Payment recorded successfully! Remaining balance: ${formatCurrency(remainingBalance)}`);
+        } else if (remainingBalance === 0) {
+          toast.success('Payment recorded successfully! Course fee is now fully paid! 🎉');
+        } else {
+          toast.success('Payment recorded successfully!');
+        }
         navigate('/fees');
       }
     } catch (error) {
@@ -308,7 +406,6 @@ const RecordPayment = () => {
 
     setIsSubmitting(true);
     try {
-      // First enroll the student
       const enrollResult = await enrollStudent(
         selectedCourse._id,
         selectedStudent._id,
@@ -316,7 +413,7 @@ const RecordPayment = () => {
       );
       
       if (enrollResult.success) {
-        // Then proceed with payment
+        setIsStudentEnrolled(true);
         await handleSubmit(new Event('submit'));
       } else {
         toast.error('Failed to enroll student');
@@ -329,20 +426,59 @@ const RecordPayment = () => {
     }
   };
 
-  const getMethodIcon = (method) => {
-    const icons = {
-      mpesa: Smartphone,
-      cooperative_bank: Landmark,
-      family_bank: Landmark,
-      cash: Wallet,
-      other: CreditCard
-    };
-    const Icon = icons[method] || CreditCard;
-    return <Icon className="w-5 h-5" />;
-  };
+  // Filter students
+  const filteredStudents = students.filter(student => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      student.user?.name?.toLowerCase().includes(searchLower) ||
+      student.studentId?.toLowerCase().includes(searchLower) ||
+      student.user?.email?.toLowerCase().includes(searchLower)
+    );
+  });
 
-  // Show loading state while data is being fetched
-  if (!dataLoaded || studentsLoading || coursesLoading) {
+  // Filter courses with outstanding balance calculation
+  const filteredCourses = courses.map(course => {
+    let outstandingBalance = course.price || 0;
+    let paidAmount = 0;
+    let paymentStatus = 'unpaid';
+    
+    if (selectedStudent && studentFeeData) {
+      let courseFee = null;
+      
+      if (studentFeeData.paymentSummary?.courses) {
+        courseFee = studentFeeData.paymentSummary.courses.find(
+          c => c.courseId === course._id || c.courseCode === course.courseCode
+        );
+      } else if (studentFeeData.outstandingBalances) {
+        courseFee = studentFeeData.outstandingBalances.find(
+          c => c.courseId === course._id || c.courseCode === course.courseCode
+        );
+      }
+      
+      if (courseFee) {
+        paidAmount = courseFee.paid || courseFee.totalPaid || 0;
+        outstandingBalance = courseFee.balance || courseFee.remainingBalance || course.price;
+        paymentStatus = outstandingBalance === 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid';
+      }
+    }
+    
+    return {
+      ...course,
+      outstandingBalance,
+      paidAmount,
+      paymentStatus
+    };
+  }).filter(course => {
+    if (!courseSearchTerm) return true;
+    const searchLower = courseSearchTerm.toLowerCase();
+    return (
+      course.name?.toLowerCase().includes(searchLower) ||
+      course.courseCode?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  if (!dataLoaded) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-96">
@@ -362,7 +498,7 @@ const RecordPayment = () => {
         <div className="mb-8">
           <div className="flex items-center space-x-4">
             <button
-              onClick={handleBack}
+              onClick={() => step > 1 ? setStep(step - 1) : navigate('/fees')}
               className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -423,7 +559,6 @@ const RecordPayment = () => {
             </div>
 
             <div className="p-6">
-              {/* Search */}
               <div className="relative mb-6">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
@@ -440,46 +575,51 @@ const RecordPayment = () => {
                 />
               </div>
 
-              {/* Students Dropdown */}
-              {showStudentDropdown && filteredStudents.length > 0 && (
+              {showStudentDropdown && (
                 <div className="absolute z-10 w-full max-w-2xl mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {filteredStudents.map((student) => (
-                    <button
-                      key={student._id}
-                      onClick={() => handleSelectStudent(student)}
-                      className="w-full px-4 py-3 text-left hover:bg-green-50 transition-colors border-b border-gray-100 last:border-b-0"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="h-8 w-8 bg-gradient-to-r from-green-600 to-emerald-700 rounded-full flex items-center justify-center flex-shrink-0">
-                          <span className="text-white font-medium text-xs">
-                            {student.user?.name?.charAt(0).toUpperCase()}
-                          </span>
+                  {fetchingEnrollments ? (
+                    <div className="p-8 text-center">
+                      <Loader className="w-6 h-6 animate-spin text-green-600 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">Loading student details...</p>
+                    </div>
+                  ) : filteredStudents.length > 0 ? (
+                    filteredStudents.map((student) => (
+                      <button
+                        key={student._id}
+                        onClick={() => handleSelectStudent(student)}
+                        className="w-full px-4 py-3 text-left hover:bg-green-50 transition-colors border-b border-gray-100 last:border-b-0"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="h-8 w-8 bg-gradient-to-r from-green-600 to-emerald-700 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-white font-medium text-xs">
+                              {student.user?.name?.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">
+                              {student.user?.name}
+                            </p>
+                            <p className="text-xs text-gray-500 flex items-center">
+                              <Hash className="w-3 h-3 mr-1" />
+                              {student.studentId} • {student.user?.email}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900">
-                            {student.user?.name}
-                          </p>
-                          <p className="text-xs text-gray-500 flex items-center">
-                            <Hash className="w-3 h-3 mr-1" />
-                            {student.studentId} • {student.user?.email}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {showStudentDropdown && searchTerm && filteredStudents.length === 0 && (
-                <div className="absolute z-10 w-full max-w-2xl mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-gray-500">
-                  No students found
+                      </button>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-gray-500">
+                      <User className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                      <p className="text-sm">No students found</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Step 2: Select Course */}
+        {/* Step 2: Select Course - Enhanced with outstanding balance */}
         {step === 2 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-6 border-b border-gray-200 bg-gray-50">
@@ -494,7 +634,6 @@ const RecordPayment = () => {
             </div>
 
             <div className="p-6">
-              {/* Search */}
               <div className="relative mb-6">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
@@ -511,13 +650,32 @@ const RecordPayment = () => {
                 />
               </div>
 
-              {/* Courses Dropdown */}
-              {showCourseDropdown && filteredCourses.length > 0 && (
-                <div className="absolute z-10 w-full max-w-2xl mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+              {fetchingFeeData && (
+                <div className="text-center py-4">
+                  <Loader className="w-6 h-6 animate-spin text-green-600 mx-auto" />
+                  <p className="text-sm text-gray-500 mt-2">Loading fee data...</p>
+                </div>
+              )}
+
+              {showCourseDropdown && !fetchingFeeData && filteredCourses.length > 0 && (
+                <div className="absolute z-10 w-full max-w-2xl mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
                   {filteredCourses.map((course) => {
                     const isEnrolled = selectedStudent?.enrollments?.some(
                       e => e.course === course._id || e.courseId === course._id
                     );
+                    
+                    const getStatusBadge = () => {
+                      if (course.paymentStatus === 'paid') {
+                        return { color: 'bg-green-100 text-green-800', text: 'Fully Paid', icon: CheckCircle };
+                      } else if (course.paymentStatus === 'partial') {
+                        return { color: 'bg-yellow-100 text-yellow-800', text: 'Partial Payment', icon: AlertCircle };
+                      } else {
+                        return { color: 'bg-red-100 text-red-800', text: 'Unpaid', icon: AlertTriangle };
+                      }
+                    };
+                    
+                    const statusBadge = getStatusBadge();
+                    const StatusIcon = statusBadge.icon;
                     
                     return (
                       <button
@@ -525,23 +683,60 @@ const RecordPayment = () => {
                         onClick={() => handleSelectCourse(course)}
                         className="w-full px-4 py-3 text-left hover:bg-green-50 transition-colors border-b border-gray-100 last:border-b-0"
                       >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              {course.courseCode} - {course.name}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Duration: {course.duration} • Intake: {course.intakeMonth} {course.intakeYear}
-                              {isEnrolled && (
-                                <span className="ml-2 inline-flex items-center px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
-                                  ✓ Enrolled
-                                </span>
-                              )}
-                            </p>
+                        <div className="flex flex-col space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">
+                                {course.courseCode} - {course.name}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Duration: {course.duration} • Intake: {course.intakeMonth} {course.intakeYear}
+                                {isEnrolled && (
+                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">
+                                    ✓ Enrolled
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusBadge.color}`}>
+                              <StatusIcon className="w-3 h-3 mr-1" />
+                              {statusBadge.text}
+                            </span>
                           </div>
-                          <p className="text-sm font-bold text-green-600">
-                            {formatCurrency(course.price || 0)}
-                          </p>
+                          
+                          <div className="grid grid-cols-3 gap-2 text-xs bg-gray-50 p-2 rounded-lg">
+                            <div className="text-center">
+                              <p className="text-gray-500">Total Fee</p>
+                              <p className="font-bold text-gray-900">{formatCurrency(course.price)}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-gray-500">Paid</p>
+                              <p className="font-bold text-green-600">{formatCurrency(course.paidAmount)}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-gray-500">Outstanding</p>
+                              <p className={`font-bold ${course.outstandingBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                                {formatCurrency(course.outstandingBalance)}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {course.price > 0 && (
+                            <div className="flex items-center space-x-2">
+                              <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                                <div
+                                  className={`h-1.5 rounded-full ${
+                                    course.paymentStatus === 'paid' ? 'bg-green-500' :
+                                    course.paymentStatus === 'partial' ? 'bg-yellow-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${((course.price - course.outstandingBalance) / course.price) * 100}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {Math.round(((course.price - course.outstandingBalance) / course.price) * 100)}% paid
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </button>
                     );
@@ -549,7 +744,7 @@ const RecordPayment = () => {
                 </div>
               )}
 
-              {showCourseDropdown && courseSearchTerm && filteredCourses.length === 0 && (
+              {showCourseDropdown && courseSearchTerm && filteredCourses.length === 0 && !fetchingFeeData && (
                 <div className="absolute z-10 w-full max-w-2xl mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-gray-500">
                   No courses found
                 </div>
@@ -588,7 +783,75 @@ const RecordPayment = () => {
                 </div>
               </div>
 
-              {/* Amount */}
+              {/* Fee Balance Summary Card */}
+              {courseFeeDetails && (
+                <div className={`rounded-lg p-4 border ${
+                  courseFeeDetails.balance > 0 
+                    ? 'bg-yellow-50 border-yellow-200' 
+                    : 'bg-green-50 border-green-200'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">Current Fee Status</p>
+                    <TrendingDown className={`w-4 h-4 ${
+                      courseFeeDetails.balance > 0 ? 'text-yellow-600' : 'text-green-600'
+                    }`} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-xs text-gray-500">Total Fee</p>
+                      <p className="text-sm font-bold text-gray-900">
+                        {formatCurrency(courseFeeDetails.price)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Paid</p>
+                      <p className="text-sm font-bold text-green-600">
+                        {formatCurrency(courseFeeDetails.paid)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Outstanding</p>
+                      <p className={`text-sm font-bold ${
+                        courseFeeDetails.balance > 0 ? 'text-orange-600' : 'text-green-600'
+                      }`}>
+                        {formatCurrency(courseFeeDetails.balance)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Receipt Number - NO AUTO-GENERATION */}
+              <div>
+                <label htmlFor="receiptNumber" className="block text-sm font-medium text-gray-700 mb-2">
+                  Receipt Number *
+                </label>
+                <div className="relative">
+                  <Receipt className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    id="receiptNumber"
+                    name="receiptNumber"
+                    value={formData.receiptNumber}
+                    onChange={handleChange}
+                    placeholder="Enter receipt number from receipt book"
+                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+                      errors.receiptNumber ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  />
+                </div>
+                {errors.receiptNumber && (
+                  <p className="mt-1 text-sm text-red-600 flex items-center">
+                    <AlertCircle className="w-4 h-4 mr-1" />
+                    {errors.receiptNumber}
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Enter the receipt number from your physical receipt book
+                </p>
+              </div>
+
+              {/* Amount - Pre-filled with outstanding balance */}
               <div>
                 <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-2">
                   Amount *
@@ -615,9 +878,91 @@ const RecordPayment = () => {
                     {errors.amount}
                   </p>
                 )}
-                <p className="mt-1 text-xs text-gray-500">
-                  Course fee: {formatCurrency(selectedCourse.price || 0)}
-                </p>
+                {courseFeeDetails?.balance > 0 && (
+                  <p className="mt-1 text-xs text-blue-600">
+                    Outstanding balance: {formatCurrency(courseFeeDetails.balance)}
+                  </p>
+                )}
+              </div>
+
+              {/* Payer Information Section */}
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="text-md font-medium text-gray-900 mb-4 flex items-center">
+                  <Users className="w-4 h-4 mr-2 text-green-600" />
+                  Payer Information
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label htmlFor="payerName" className="block text-sm font-medium text-gray-700 mb-2">
+                      Payer Name *
+                    </label>
+                    <input
+                      type="text"
+                      id="payerName"
+                      name="payerName"
+                      value={formData.payerName}
+                      onChange={handleChange}
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+                        errors.payerName ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                      placeholder="Full name of person making payment"
+                    />
+                    {errors.payerName && (
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        {errors.payerName}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label htmlFor="payerRelationship" className="block text-sm font-medium text-gray-700 mb-2">
+                      Relationship to Student *
+                    </label>
+                    <select
+                      id="payerRelationship"
+                      name="payerRelationship"
+                      value={formData.payerRelationship}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    >
+                      {payerRelationships.map(rel => (
+                        <option key={rel.value} value={rel.value}>{rel.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="payerContact" className="block text-sm font-medium text-gray-700 mb-2">
+                      Payer Contact (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="payerContact"
+                      name="payerContact"
+                      value={formData.payerContact}
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      placeholder="Phone number or email"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label htmlFor="payerNotes" className="block text-sm font-medium text-gray-700 mb-2">
+                      Additional Notes (Optional)
+                    </label>
+                    <textarea
+                      id="payerNotes"
+                      name="payerNotes"
+                      value={formData.payerNotes}
+                      onChange={handleChange}
+                      rows={2}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      placeholder="Any additional notes about the payer..."
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Payment Method */}
@@ -662,7 +1007,7 @@ const RecordPayment = () => {
                 )}
               </div>
 
-              {/* Transaction ID (for M-Pesa and Bank) */}
+              {/* Transaction ID */}
               {(formData.paymentMethod === 'mpesa' || 
                 formData.paymentMethod === 'cooperative_bank' || 
                 formData.paymentMethod === 'family_bank') && (
@@ -693,7 +1038,7 @@ const RecordPayment = () => {
                 </div>
               )}
 
-              {/* Payment Reference (Optional) */}
+              {/* Payment Reference */}
               <div>
                 <label htmlFor="paymentReference" className="block text-sm font-medium text-gray-700 mb-2">
                   Payment Reference (Optional)
@@ -800,7 +1145,7 @@ const RecordPayment = () => {
               <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={handleBack}
+                  onClick={() => setStep(2)}
                   className="px-6 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
                 >
                   Back

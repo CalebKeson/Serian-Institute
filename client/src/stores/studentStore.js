@@ -1,4 +1,5 @@
-// src/stores/studentStore.js
+// frontend/src/stores/studentStore.js - FIXED createStudent function
+
 import { create } from "zustand";
 import { studentAPI } from "../services/studentAPI";
 import toast from "react-hot-toast";
@@ -18,6 +19,8 @@ export const useStudentStore = create((set, get) => ({
     results: 0,
     limit: 10,
   },
+  // Additional state for admission numbers
+  studentAdmissionNumbers: [],
 
   // Fetch all students with pagination and search
   fetchStudents: async (page = 1, limit = 10, search = "") => {
@@ -79,7 +82,7 @@ export const useStudentStore = create((set, get) => ({
     }
   },
 
-  // NEW: Fetch student with enrollments (includes course data)
+  // Fetch student with enrollments
   fetchStudentWithEnrollments: async (id) => {
     set({ loading: true, error: null });
 
@@ -89,6 +92,7 @@ export const useStudentStore = create((set, get) => ({
 
       set({
         currentStudent: student,
+        studentAdmissionNumbers: student.admissionNumbers || [],
         loading: false,
       });
 
@@ -112,16 +116,17 @@ export const useStudentStore = create((set, get) => ({
   fetchStudentCount: async () => {
     try {
       const response = await studentAPI.getStudentCount();
-      const newCount = response.data.data?.count || 0;
+      const data = response.data.data || {};
+      const newCount = data.total || 0;
       
       if (get().studentCount !== newCount) {
         set({ studentCount: newCount });
       }
       
-      return newCount;
+      return { total: data.total || 0, enrolled: data.enrolled || 0, notEnrolled: data.notEnrolled || 0 };
     } catch (error) {
       console.warn("Failed to fetch student count:", error);
-      return get().studentCount;
+      return { total: get().studentCount, enrolled: 0, notEnrolled: 0 };
     }
   },
 
@@ -135,7 +140,7 @@ export const useStudentStore = create((set, get) => ({
       if (document.visibilityState === 'visible') {
         get().fetchStudentCount();
       }
-    }, 60000); // 60 seconds
+    }, 60000);
     
     set({ pollingInterval: interval });
     get().fetchStudentCount();
@@ -149,12 +154,15 @@ export const useStudentStore = create((set, get) => ({
     }
   },
 
-  // Create new student
+  // FIXED: Create new student - ensure proper return structure
   createStudent: async (studentData) => {
     set({ loading: true, error: null });
 
     try {
+      // studentId will be null - backend handles this
       const response = await studentAPI.createStudent(studentData);
+      console.log("Create student response:", response.data); // Debug log
+      
       const newStudent = response.data.data;
 
       const { students, pagination, studentCount } = get();
@@ -171,7 +179,8 @@ export const useStudentStore = create((set, get) => ({
         loading: false,
       });
 
-      toast.success("Student created successfully!");
+      toast.success(response.data.message || "Student created successfully!");
+      // Return the student data with _id for navigation
       return { success: true, data: newStudent };
     } catch (error) {
       let errorMessage = "Failed to create student";
@@ -185,7 +194,7 @@ export const useStudentStore = create((set, get) => ({
 
       set({ error: errorMessage, loading: false });
       toast.error(errorMessage);
-      return { success: false, message: errorMessage };
+      return { success: false, message: errorMessage, data: null };
     }
   },
 
@@ -255,6 +264,33 @@ export const useStudentStore = create((set, get) => ({
       toast.error(errorMessage);
       return { success: false, message: errorMessage };
     }
+  },
+
+  // Helper method to get student display admission numbers
+  getStudentDisplayAdmissionNumbers: (student) => {
+    if (!student) return "Not enrolled";
+    if (student.admissionNumbers && student.admissionNumbers.length > 0) {
+      return student.admissionNumbers.map(a => a.admissionNumber).join(", ");
+    }
+    if (student.enrollments && student.enrollments.length > 0) {
+      return student.enrollments.map(e => e.admissionNumber).filter(Boolean).join(", ");
+    }
+    return "Not enrolled";
+  },
+
+  // Helper method to check if student has any enrollments
+  hasEnrollments: (student) => {
+    if (!student) return false;
+    return (student.admissionNumbers?.length > 0) || 
+           (student.enrollments?.length > 0) ||
+           student.hasEnrollments === true;
+  },
+
+  // Get student enrollment status text
+  getEnrollmentStatusText: (student) => {
+    if (!student) return "Not enrolled";
+    const hasEnroll = get().hasEnrollments(student);
+    return hasEnroll ? "Enrolled" : "Not enrolled";
   },
 
   // Get student fee summary
@@ -355,7 +391,7 @@ export const useStudentStore = create((set, get) => ({
 
   // Clear current student
   clearCurrentStudent: () => {
-    set({ currentStudent: null });
+    set({ currentStudent: null, studentAdmissionNumbers: [] });
   },
 
   // Clear all student data
@@ -367,6 +403,7 @@ export const useStudentStore = create((set, get) => ({
       studentPayments: [],
       studentAttendance: null,
       studentGrades: [],
+      studentAdmissionNumbers: [],
       loading: false,
       error: null,
     });
@@ -381,6 +418,7 @@ export const useStudentStore = create((set, get) => ({
       error: null,
       searchTerm: "",
       studentCount: 0,
+      studentAdmissionNumbers: [],
       pagination: {
         current: 1,
         total: 1,

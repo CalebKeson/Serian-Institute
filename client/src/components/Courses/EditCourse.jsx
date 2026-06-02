@@ -1,4 +1,5 @@
-// src/pages/Courses/EditCourse.jsx - UPDATED WITH CNA
+// src/pages/Courses/EditCourse.jsx - COMPLETE FIXED VERSION with correct instructor display
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { 
@@ -25,7 +26,7 @@ import {
   Zap,
   Cpu,
   FileText,
-  HeartPulse // ADD THIS for CNA
+  HeartPulse
 } from 'lucide-react';
 import Layout from '../../components/Layout/Layout';
 import { useCourseStore } from '../../stores/courseStore';
@@ -48,7 +49,6 @@ const EditCourse = () => {
   const { instructors, fetchInstructors, loading: instructorsLoading } = useInstructorStore();
 
   const [formData, setFormData] = useState({
-    // Basic course information
     courseCode: '',
     name: '',
     description: '',
@@ -57,36 +57,27 @@ const EditCourse = () => {
     intakeMonth: '',
     intakeYear: '',
     batchNumber: '',
-    
-    // Instructor
     instructor: '',
-    
-    // Schedule information
     schedule: {
       days: [],
       time: '',
       room: ''
     },
-    
-    // Course capacity and requirements
     maxStudents: 20,
     practicalHours: 0,
     workshopRequired: false,
-    skillsLabRequired: false, // ADDED for nursing
+    skillsLabRequired: false,
     certification: '',
-    price: 0, // ADDED for course fee
+    price: 0,
     requirements: '',
-    courseBreakdown: '', // ADDED for syllabus
-    notes: '', // ADDED for additional notes
-    
-    // Status
+    courseBreakdown: '',
+    notes: '',
     status: 'active'
   });
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch course data and instructors when component mounts
   useEffect(() => {
     if (id) {
       fetchCourse(id);
@@ -99,9 +90,8 @@ const EditCourse = () => {
     return () => {
       clearCurrentCourse();
     };
-  }, [id, user]);
+  }, [id, user, fetchCourse, fetchInstructors, clearCurrentCourse]);
 
-  // Populate form when course data is loaded
   useEffect(() => {
     if (currentCourse) {
       setFormData({
@@ -122,27 +112,25 @@ const EditCourse = () => {
         maxStudents: currentCourse.maxStudents || 20,
         practicalHours: currentCourse.practicalHours || 0,
         workshopRequired: currentCourse.workshopRequired || false,
-        skillsLabRequired: currentCourse.skillsLabRequired || false, // ADDED
+        skillsLabRequired: currentCourse.skillsLabRequired || false,
         certification: currentCourse.certification || '',
-        price: currentCourse.price || 0, // ADDED
+        price: currentCourse.price || 0,
         requirements: currentCourse.requirements || '',
-        courseBreakdown: currentCourse.courseBreakdown || '', // ADDED
-        notes: currentCourse.notes || '', // ADDED
+        courseBreakdown: currentCourse.courseBreakdown || '',
+        notes: currentCourse.notes || '',
         status: currentCourse.status || 'active'
       });
     }
   }, [currentCourse]);
 
-  // Data options based on your Course model - UPDATED with CNA
   const courseTypes = [
     { value: 'driving', label: 'Driving Classes', icon: Car },
     { value: 'plumbing', label: 'Plumbing', icon: Droplets },
     { value: 'electrical', label: 'Electrical Installation', icon: Zap },
     { value: 'computer', label: 'Computer Packages', icon: Cpu },
-    { value: 'cna', label: 'Certified Nursing Assistant', icon: HeartPulse } // ADDED
+    { value: 'cna', label: 'Certified Nursing Assistant', icon: HeartPulse }
   ];
 
-  // UPDATED: Added longer durations for nursing
   const durations = ['1 month', '3 months', '6 months', '1 year', '2 years'];
   
   const intakeMonths = [
@@ -150,7 +138,6 @@ const EditCourse = () => {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
   
-  // UPDATED: Added nursing certifications
   const certificationTypes = [
     'NTSA License',
     'Government Trade Test', 
@@ -164,7 +151,6 @@ const EditCourse = () => {
   const statusOptions = ['active', 'inactive', 'completed', 'cancelled'];
   const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   
-  // Generate year options (current year ± 2 years)
   const generateYearOptions = () => {
     const currentYear = new Date().getFullYear();
     const years = [];
@@ -174,7 +160,6 @@ const EditCourse = () => {
     return years;
   };
 
-  // Check if user is admin/instructor
   if (!['admin', 'instructor'].includes(user?.role)) {
     navigate('/courses');
     return null;
@@ -183,7 +168,6 @@ const EditCourse = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     
-    // Handle nested objects
     if (name.startsWith('schedule.')) {
       const field = name.split('.')[1];
       setFormData(prev => ({
@@ -194,7 +178,6 @@ const EditCourse = () => {
         }
       }));
     } 
-    // Handle days array for checkboxes
     else if (name === 'days') {
       setFormData(prev => ({
         ...prev,
@@ -206,14 +189,12 @@ const EditCourse = () => {
         }
       }));
     }
-    // Handle boolean fields
     else if (type === 'checkbox') {
       setFormData(prev => ({
         ...prev,
         [name]: checked
       }));
     }
-    // Handle number fields
     else if (type === 'number') {
       setFormData(prev => ({
         ...prev,
@@ -227,7 +208,6 @@ const EditCourse = () => {
       }));
     }
 
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -239,11 +219,10 @@ const EditCourse = () => {
   const validateForm = () => {
     const newErrors = {};
 
-    // Required fields validation
     const requiredFields = [
       'courseCode', 'name', 'courseType', 'duration', 
       'intakeMonth', 'intakeYear', 'batchNumber', 'instructor',
-      'maxStudents', 'certification', 'price' // ADDED price
+      'maxStudents', 'certification', 'price'
     ];
 
     requiredFields.forEach(field => {
@@ -252,16 +231,14 @@ const EditCourse = () => {
       }
     });
 
-    // Format validation - UPDATED to include CNA
-    if (formData.courseCode && !/^[A-Z]{3,4}\d{3}$/.test(formData.courseCode.toUpperCase())) {
-      newErrors.courseCode = 'Course code must be like CNA101, DRV101, PLB201, ELC301, COM401';
+    if (formData.courseCode && !/^[A-Z]{3,4}$/.test(formData.courseCode.toUpperCase())) {
+      newErrors.courseCode = 'Course code must be 3-4 uppercase letters (e.g., CNA, DRV, PLB, ELC, COM)';
     }
 
     if (formData.intakeYear && !/^\d{4}$/.test(formData.intakeYear)) {
       newErrors.intakeYear = 'Year must be 4 digits (e.g., 2024)';
     }
 
-    // Range validation - UPDATED max to 100 for nursing
     if (formData.maxStudents && (formData.maxStudents < 1 || formData.maxStudents > 100)) {
       newErrors.maxStudents = 'Maximum students must be between 1 and 100';
     }
@@ -274,7 +251,6 @@ const EditCourse = () => {
       newErrors.price = 'Price cannot be negative';
     }
 
-    // Schedule validation
     if (!formData.schedule.days.length) newErrors.days = 'At least one day must be selected';
     if (!formData.schedule.time.trim()) newErrors['schedule.time'] = 'Class time is required';
     if (!formData.schedule.room.trim()) newErrors['schedule.room'] = 'Room is required';
@@ -294,10 +270,9 @@ const EditCourse = () => {
     setIsSubmitting(true);
 
     try {
-      // Prepare data for submission
       const submissionData = {
         ...formData,
-        courseCode: formData.courseCode.toUpperCase() // Ensure uppercase
+        courseCode: formData.courseCode.toUpperCase()
       };
 
       const result = await updateCourse(id, submissionData);
@@ -384,7 +359,7 @@ const EditCourse = () => {
         {/* Form */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <form onSubmit={handleSubmit} className="p-6 space-y-8">
-            {/* Basic Information Section */}
+            {/* Basic Information Section - Same as AddCourse */}
             <div>
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <BookOpen className="w-5 h-5 mr-2 text-purple-600" />
@@ -408,7 +383,7 @@ const EditCourse = () => {
                       className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors ${
                         errors.courseCode ? 'border-red-300' : 'border-gray-300'
                       }`}
-                      placeholder="e.g., CNA101, DRV101, PLB201, ELC301, COM401"
+                      placeholder="e.g., CNA, DRV, PLB, ELC, COM"
                       style={{ textTransform: 'uppercase' }}
                     />
                   </div>
@@ -419,7 +394,7 @@ const EditCourse = () => {
                     </p>
                   )}
                   <p className="mt-1 text-xs text-gray-500">
-                    Format: 3-4 letters + 3 numbers
+                    Format: 3-4 uppercase letters only (e.g., CNA, DRV, PLB, ELC, COM)
                   </p>
                 </div>
 
@@ -479,7 +454,7 @@ const EditCourse = () => {
                   )}
                 </div>
 
-                {/* Duration - UPDATED with longer options */}
+                {/* Duration */}
                 <div>
                   <label htmlFor="duration" className="block text-sm font-medium text-gray-700 mb-2">
                     Duration *
@@ -587,7 +562,7 @@ const EditCourse = () => {
                   )}
                 </div>
 
-                {/* Maximum Students - UPDATED max to 100 */}
+                {/* Maximum Students */}
                 <div>
                   <label htmlFor="maxStudents" className="block text-sm font-medium text-gray-700 mb-2">
                     Maximum Students *
@@ -618,7 +593,7 @@ const EditCourse = () => {
                   </p>
                 </div>
 
-                {/* Price - NEW */}
+                {/* Price */}
                 <div>
                   <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-2">
                     Course Price (KSh) *
@@ -674,7 +649,7 @@ const EditCourse = () => {
                   )}
                 </div>
 
-                {/* Certification Type - UPDATED with nursing options */}
+                {/* Certification Type */}
                 <div className="md:col-span-2">
                   <label htmlFor="certification" className="block text-sm font-medium text-gray-700 mb-2">
                     Certification Type *
@@ -738,7 +713,7 @@ const EditCourse = () => {
                   </label>
                 </div>
 
-                {/* Skills Lab Required - NEW for nursing */}
+                {/* Skills Lab Required */}
                 <div className="md:col-span-1">
                   <label className="flex items-center space-x-2">
                     <input
@@ -773,7 +748,7 @@ const EditCourse = () => {
                 </p>
               </div>
 
-              {/* Course Breakdown - NEW */}
+              {/* Course Breakdown */}
               <div className="mt-6">
                 <label htmlFor="courseBreakdown" className="block text-sm font-medium text-gray-700 mb-2">
                   Course Breakdown / Syllabus
@@ -793,7 +768,7 @@ const EditCourse = () => {
                 </p>
               </div>
 
-              {/* Requirements - UPDATED max length */}
+              {/* Requirements */}
               <div className="mt-6">
                 <label htmlFor="requirements" className="block text-sm font-medium text-gray-700 mb-2">
                   Requirements (Optional)
@@ -813,7 +788,7 @@ const EditCourse = () => {
                 </p>
               </div>
 
-              {/* Notes - NEW */}
+              {/* Notes */}
               <div className="mt-6">
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
                   Additional Notes
@@ -834,7 +809,7 @@ const EditCourse = () => {
               </div>
             </div>
 
-            {/* Instructor Selection Section */}
+            {/* Instructor Selection Section - FIXED: Use instructor.user.name */}
             <div>
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <User className="w-5 h-5 mr-2 text-purple-600" />
@@ -870,8 +845,8 @@ const EditCourse = () => {
                     >
                       <option value="">Select Instructor</option>
                       {instructors.map(instructor => (
-                        <option key={instructor._id} value={instructor._id}>
-                          {instructor.name} ({instructor.email}) - {instructor.role}
+                        <option key={instructor._id} value={instructor.user?._id || instructor._id}>
+                          {instructor.user?.name || instructor.name} ({instructor.user?.email || instructor.email || 'No email'}) - {instructor.department || 'Instructor'}
                         </option>
                       ))}
                     </select>
@@ -891,7 +866,7 @@ const EditCourse = () => {
               </div>
             </div>
 
-            {/* Schedule Section */}
+            {/* Schedule Section - Same as AddCourse */}
             <div>
               <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <Calendar className="w-5 h-5 mr-2 text-purple-600" />
@@ -899,7 +874,6 @@ const EditCourse = () => {
               </h2>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Days Selection */}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Class Days *
@@ -927,7 +901,6 @@ const EditCourse = () => {
                   )}
                 </div>
 
-                {/* Class Time */}
                 <div>
                   <label htmlFor="schedule.time" className="block text-sm font-medium text-gray-700 mb-2">
                     Class Time *
@@ -954,7 +927,6 @@ const EditCourse = () => {
                   )}
                 </div>
 
-                {/* Room */}
                 <div>
                   <label htmlFor="schedule.room" className="block text-sm font-medium text-gray-700 mb-2">
                     Room/Location *

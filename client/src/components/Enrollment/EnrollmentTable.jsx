@@ -1,3 +1,5 @@
+// src/components/Enrollment/EnrollmentTable.jsx - UPDATED with admission numbers
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   User,
@@ -12,7 +14,9 @@ import {
   Clock,
   UserMinus,
   RefreshCw,
-  Minus
+  Minus,
+  BookOpen,
+  GraduationCap
 } from 'lucide-react';
 
 const EnrollmentTable = ({ 
@@ -22,7 +26,8 @@ const EnrollmentTable = ({
   onUpdateEnrollment,
   currentUser,
   courseId,
-  view = 'course'
+  view = 'course',
+  onViewCourse
 }) => {
   const [showActionsMenu, setShowActionsMenu] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -90,7 +95,6 @@ const EnrollmentTable = ({
     );
   };
 
-  // CHANGED: Default grade display when no grade is assigned
   const getGradeBadge = (grade) => {
     if (!grade) {
       return (
@@ -113,6 +117,26 @@ const EnrollmentTable = ({
       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${gradeColors[grade] || 'bg-gray-100 text-gray-800'}`}>
         {grade}
       </span>
+    );
+  };
+
+  // NEW: Get admission number display
+  const getAdmissionNumberDisplay = (admissionNumber) => {
+    if (!admissionNumber) {
+      return (
+        <span className="text-sm text-gray-400 italic">
+          Not assigned
+        </span>
+      );
+    }
+    
+    return (
+      <div className="flex flex-col">
+        <code className="text-sm font-mono font-medium text-purple-700 bg-purple-50 px-2 py-1 rounded">
+          {admissionNumber}
+        </code>
+        <span className="text-xs text-gray-500 mt-0.5">Admission Number</span>
+      </div>
     );
   };
 
@@ -188,7 +212,7 @@ const EnrollmentTable = ({
                   Student
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Student ID
+                  Admission Number
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Enrollment Date
@@ -209,6 +233,9 @@ const EnrollmentTable = ({
               <>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Course
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Admission Number
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Enrollment Date
@@ -234,7 +261,7 @@ const EnrollmentTable = ({
               {view === 'course' ? (
                 <>
                   {/* Student Info Column */}
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4">
                     <div className="flex items-center">
                       <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center">
                         <span className="text-white font-medium text-sm">
@@ -253,12 +280,9 @@ const EnrollmentTable = ({
                     </div>
                   </td>
 
-                  {/* Student ID Column */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 flex items-center">
-                      <Hash className="w-4 h-4 mr-2 text-blue-500" />
-                      {enrollment.student?.studentId || 'N/A'}
-                    </div>
+                  {/* NEW: Admission Number Column */}
+                  <td className="px-6 py-4">
+                    {getAdmissionNumberDisplay(enrollment.admissionNumber)}
                   </td>
 
                   {/* Enrollment Date Column */}
@@ -275,7 +299,7 @@ const EnrollmentTable = ({
               ) : (
                 <>
                   {/* Course Info Column */}
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4">
                     <div className="flex items-center">
                       <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-purple-600 to-indigo-700 rounded-lg flex items-center justify-center">
                         <span className="text-white font-medium text-sm">
@@ -283,14 +307,22 @@ const EnrollmentTable = ({
                         </span>
                       </div>
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
+                        <button
+                          onClick={() => onViewCourse && onViewCourse(enrollment.course?._id)}
+                          className="text-sm font-medium text-gray-900 hover:text-purple-600 hover:underline text-left"
+                        >
                           {enrollment.course?.courseCode} - {enrollment.course?.name}
-                        </div>
+                        </button>
                         <div className="text-sm text-gray-500">
                           Instructor: {enrollment.course?.instructor?.name || 'Unassigned'}
                         </div>
                       </div>
                     </div>
+                  </td>
+
+                  {/* NEW: Admission Number Column */}
+                  <td className="px-6 py-4">
+                    {getAdmissionNumberDisplay(enrollment.admissionNumber)}
                   </td>
 
                   {/* Enrollment Date Column */}
@@ -308,7 +340,7 @@ const EnrollmentTable = ({
                 {getStatusBadge(enrollment.status)}
               </td>
 
-              {/* Grade Column - CHANGED: Now shows default "Not Graded" */}
+              {/* Grade Column */}
               <td className="px-6 py-4 whitespace-nowrap">
                 {getGradeBadge(enrollment.grade)}
               </td>
