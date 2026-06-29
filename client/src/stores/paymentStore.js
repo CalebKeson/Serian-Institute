@@ -18,7 +18,17 @@ export const usePaymentStore = create((set, get) => ({
   loading: false,
   error: null,
   
-  // Filters and pagination
+  // Data cache
+  dataCache: {
+    payments: [],
+    paymentStats: null,
+    outstandingReport: null,
+    collectionReport: null,
+    coursePaymentSummary: null,
+    courseStudentsPaymentStatus: []
+  },
+  
+  // Filter state
   filters: {
     page: 1,
     limit: 10,
@@ -41,36 +51,9 @@ export const usePaymentStore = create((set, get) => ({
     totalAmount: 0
   },
 
-  // Date range options for reports
-  dateRangeOptions: [
-    { label: 'Today', days: 0 },
-    { label: 'This Week', days: 7 },
-    { label: 'This Month', days: 30 },
-    { label: 'Last 3 Months', days: 90 },
-    { label: 'This Year', days: 365 },
-    { label: 'Custom', days: null }
-  ],
-
-  // Payment methods
-  paymentMethods: [
-    { value: 'mpesa', label: 'M-Pesa', icon: '📱', color: 'green' },
-    { value: 'cooperative_bank', label: 'Co-operative Bank', icon: '🏦', color: 'blue' },
-    { value: 'family_bank', label: 'Family Bank', icon: '🏦', color: 'purple' },
-    { value: 'cash', label: 'Cash', icon: '💵', color: 'yellow' },
-    { value: 'other', label: 'Other', icon: '🔄', color: 'gray' }
-  ],
-
-  // Payment purposes
-  paymentPurposes: [
-    { value: 'tuition', label: 'Tuition Fee', icon: '📚' },
-    { value: 'registration', label: 'Registration Fee', icon: '📝' },
-    { value: 'exam_fee', label: 'Examination Fee', icon: '✍️' },
-    { value: 'lab_fee', label: 'Skills Lab Fee', icon: '🔬' },
-    { value: 'materials', label: 'Learning Materials', icon: '📖' },
-    { value: 'other', label: 'Other', icon: '🔄' }
-  ],
-
-  // Record a new payment
+  // ============================================================
+  // RECORD PAYMENT
+  // ============================================================
   recordPayment: async (paymentData) => {
     set({ loading: true, error: null });
     
@@ -78,9 +61,13 @@ export const usePaymentStore = create((set, get) => ({
       const response = await paymentAPI.recordPayment(paymentData);
       const newPayment = response.data.data;
       
-      const { payments } = get();
+      const currentCache = get().dataCache;
       set({
-        payments: [newPayment, ...payments],
+        payments: [newPayment, ...(currentCache.payments || [])],
+        dataCache: {
+          ...currentCache,
+          payments: [newPayment, ...(currentCache.payments || [])]
+        },
         loading: false
       });
       
@@ -95,8 +82,15 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Fetch payments
+  // ============================================================
+  // FETCH PAYMENTS
+  // ============================================================
   fetchPayments: async (filters = {}) => {
+    // Don't fetch if already loading
+    if (get().loading) {
+      return { success: true, data: get().dataCache.payments };
+    }
+    
     set({ loading: true, error: null });
     
     try {
@@ -104,29 +98,37 @@ export const usePaymentStore = create((set, get) => ({
       const updatedFilters = { ...currentFilters, ...filters };
       
       const response = await paymentAPI.getPayments(updatedFilters);
+      const paymentsData = response.data.data || [];
+      const paginationData = response.data.pagination || {
+        current: updatedFilters.page || 1,
+        total: 1,
+        results: 0,
+        limit: updatedFilters.limit || 10
+      };
+      const summaryData = response.data.summary || { totalAmount: 0 };
       
       set({
-        payments: response.data.data || [],
-        pagination: response.data.pagination || {
-          current: updatedFilters.page || 1,
-          total: 1,
-          results: 0,
-          limit: updatedFilters.limit || 10
-        },
-        summary: response.data.summary || { totalAmount: 0 },
+        payments: paymentsData,
+        pagination: paginationData,
+        summary: summaryData,
         filters: updatedFilters,
+        dataCache: {
+          ...get().dataCache,
+          payments: paymentsData
+        },
         loading: false
       });
       
-      return { success: true, data: response.data.data };
+      return { success: true, data: paymentsData };
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Failed to fetch payments';
-      set({ error: errorMessage, loading: false });
-      return { success: false, message: errorMessage };
+      set({ error: error.response?.data?.message || 'Failed to fetch payments', loading: false });
+      return { success: false, message: error.message };
     }
   },
 
-  // Fetch single payment
+  // ============================================================
+  // FETCH SINGLE PAYMENT
+  // ============================================================
   fetchPayment: async (id) => {
     set({ loading: true, error: null });
     
@@ -147,7 +149,9 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Update payment
+  // ============================================================
+  // UPDATE PAYMENT
+  // ============================================================
   updatePayment: async (id, data) => {
     set({ loading: true, error: null });
     
@@ -155,7 +159,7 @@ export const usePaymentStore = create((set, get) => ({
       const response = await paymentAPI.updatePayment(id, data);
       const updatedPayment = response.data.data;
       
-      const { payments } = get();
+      const { payments, dataCache } = get();
       const updatedPayments = payments.map(p => 
         p._id === id ? updatedPayment : p
       );
@@ -163,6 +167,10 @@ export const usePaymentStore = create((set, get) => ({
       set({
         payments: updatedPayments,
         currentPayment: updatedPayment,
+        dataCache: {
+          ...dataCache,
+          payments: updatedPayments
+        },
         loading: false
       });
       
@@ -177,18 +185,24 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Delete payment
+  // ============================================================
+  // DELETE PAYMENT
+  // ============================================================
   deletePayment: async (id) => {
     set({ loading: true, error: null });
     
     try {
       await paymentAPI.deletePayment(id);
       
-      const { payments } = get();
+      const { payments, dataCache } = get();
       const filteredPayments = payments.filter(p => p._id !== id);
       
       set({
         payments: filteredPayments,
+        dataCache: {
+          ...dataCache,
+          payments: filteredPayments
+        },
         loading: false
       });
       
@@ -203,7 +217,9 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Fetch student fee summary
+  // ============================================================
+  // FETCH STUDENT FEE SUMMARY
+  // ============================================================
   fetchStudentFeeSummary: async (studentId) => {
     set({ loading: true, error: null });
     
@@ -224,60 +240,115 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Fetch payment statistics
+  // ============================================================
+  // FETCH PAYMENT STATISTICS - ALWAYS FRESH
+  // ============================================================
   fetchPaymentStats: async (params = {}) => {
     set({ loading: true, error: null });
     
     try {
       const response = await paymentAPI.getPaymentStats(params);
+      const statsData = response.data.data || {};
+      
+      // Ensure the stats have the expected structure
+      const formattedStats = {
+        totalStats: statsData.totalStats || [{ totalAmount: 0, totalPayments: 0, averageAmount: 0 }],
+        byMethod: statsData.byMethod || [],
+        byPurpose: statsData.byPurpose || [],
+        byDay: statsData.byDay || [],
+        byMonth: statsData.byMonth || [],
+        recentPayments: statsData.recentPayments || []
+      };
       
       set({
-        paymentStats: response.data.data,
+        paymentStats: formattedStats,
+        dataCache: {
+          ...get().dataCache,
+          paymentStats: formattedStats
+        },
         loading: false
       });
       
-      return { success: true, data: response.data.data };
+      return { success: true, data: formattedStats };
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Failed to fetch payment statistics';
-      set({ error: errorMessage, loading: false });
-      return { success: false, message: errorMessage };
+      console.error('Error fetching payment stats:', error);
+      set({ error: error.response?.data?.message || 'Failed to fetch payment statistics', loading: false });
+      return { success: false, message: error.message };
     }
   },
 
-  // Fetch outstanding report
+  // ============================================================
+  // FETCH OUTSTANDING REPORT - ALWAYS FRESH (FIXED)
+  // ============================================================
   fetchOutstandingReport: async (params = {}) => {
+    // Always fetch fresh data - don't use cache
     set({ loading: true, error: null });
     
     try {
       const response = await paymentAPI.getOutstandingReport(params);
+      const reportData = response.data.data || {};
+      
+      // Ensure the report has the expected structure with ALL students
+      const formattedReport = {
+        summary: {
+          totalStudents: reportData.summary?.totalStudents || 0,
+          totalOutstanding: reportData.summary?.totalOutstanding || 0,
+          averageOutstanding: reportData.summary?.averageOutstanding || 0,
+          unpaidCount: reportData.summary?.unpaidCount || 0,
+          partialCount: reportData.summary?.partialCount || 0,
+          paidCount: reportData.summary?.paidCount || 0,
+          totalFees: reportData.summary?.totalFees || 0,
+          totalPaid: reportData.summary?.totalPaid || 0,
+          enrolledCount: reportData.summary?.enrolledCount || 0,
+          completedCount: reportData.summary?.completedCount || 0
+        },
+        students: reportData.students || []
+      };
+      
+      console.log('📊 [Store] Outstanding report fetched:', {
+        totalStudents: formattedReport.summary.totalStudents,
+        totalFees: formattedReport.summary.totalFees,
+        totalPaid: formattedReport.summary.totalPaid,
+        studentsCount: formattedReport.students.length
+      });
       
       set({
-        outstandingReport: response.data.data,
+        outstandingReport: formattedReport,
+        dataCache: {
+          ...get().dataCache,
+          outstandingReport: formattedReport
+        },
         loading: false
       });
       
-      return { success: true, data: response.data.data };
+      return { success: true, data: formattedReport };
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Failed to fetch outstanding report';
-      set({ error: errorMessage, loading: false });
-      toast.error(errorMessage);
-      return { success: false, message: errorMessage };
+      console.error('Error fetching outstanding report:', error);
+      set({ error: error.response?.data?.message || 'Failed to fetch outstanding report', loading: false });
+      return { success: false, message: error.message };
     }
   },
 
-  // Fetch collection report
+  // ============================================================
+  // FETCH COLLECTION REPORT - ALWAYS FRESH
+  // ============================================================
   fetchCollectionReport: async (params = {}) => {
     set({ loading: true, error: null });
     
     try {
       const response = await paymentAPI.getCollectionReport(params);
+      const reportData = response.data.data || {};
       
       set({
-        collectionReport: response.data.data,
+        collectionReport: reportData,
+        dataCache: {
+          ...get().dataCache,
+          collectionReport: reportData
+        },
         loading: false
       });
       
-      return { success: true, data: response.data.data };
+      return { success: true, data: reportData };
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Failed to fetch collection report';
       set({ error: errorMessage, loading: false });
@@ -286,23 +357,22 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Fetch course payment summary - FIXED (prevents overwriting with empty data)
+  // ============================================================
+  // FETCH COURSE PAYMENT SUMMARY
+  // ============================================================
   fetchCoursePaymentSummary: async (courseId) => {
     set({ loading: true, error: null });
     
     try {
       const response = await paymentAPI.getCoursePaymentSummary(courseId);
-      
       const summaryData = response.data.data;
-      
-      // Skip update if data is empty and we already have valid data
-      if ((!summaryData || Object.keys(summaryData).length === 0) && get().coursePaymentSummary) {
-        set({ loading: false });
-        return { success: true, data: get().coursePaymentSummary };
-      }
       
       set({
         coursePaymentSummary: summaryData,
+        dataCache: {
+          ...get().dataCache,
+          coursePaymentSummary: summaryData
+        },
         loading: false
       });
       
@@ -315,7 +385,9 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Fetch course students payment status - FIXED (prevents overwriting with empty data)
+  // ============================================================
+  // FETCH COURSE STUDENTS PAYMENT STATUS
+  // ============================================================
   fetchCourseStudentsPaymentStatus: async (courseId, params = {}) => {
     set({ loading: true, error: null });
     
@@ -325,15 +397,14 @@ export const usePaymentStore = create((set, get) => ({
       const studentsData = response.data.data?.students || [];
       const summaryData = response.data.data?.summary;
       
-      // Skip update if we got empty data but already have existing data
-      if (studentsData.length === 0 && get().courseStudentsPaymentStatus?.length > 0) {
-        set({ loading: false });
-        return { success: true, data: { students: get().courseStudentsPaymentStatus, summary: get().coursePaymentSummary } };
-      }
-      
       set({
         courseStudentsPaymentStatus: studentsData,
         coursePaymentSummary: summaryData || get().coursePaymentSummary,
+        dataCache: {
+          ...get().dataCache,
+          courseStudentsPaymentStatus: studentsData,
+          coursePaymentSummary: summaryData || get().coursePaymentSummary
+        },
         loading: false
       });
       
@@ -346,7 +417,9 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Export course payment report
+  // ============================================================
+  // EXPORT COURSE PAYMENT REPORT
+  // ============================================================
   exportCoursePaymentReport: async (courseId, params = {}) => {
     set({ loading: true, error: null });
     
@@ -372,7 +445,9 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Export payments
+  // ============================================================
+  // EXPORT PAYMENTS
+  // ============================================================
   exportPayments: async (params = {}) => {
     set({ loading: true, error: null });
     
@@ -399,15 +474,96 @@ export const usePaymentStore = create((set, get) => ({
     }
   },
 
-  // Get cached course payment data (helper function)
-  getCachedCoursePaymentData: () => {
-    return {
-      coursePaymentSummary: get().coursePaymentSummary,
-      courseStudentsPaymentStatus: get().courseStudentsPaymentStatus
-    };
+  // ============================================================
+  // CLEAR CACHE - FORCE REFRESH
+  // ============================================================
+  clearCache: () => {
+    set({
+      dataCache: {
+        payments: [],
+        paymentStats: null,
+        outstandingReport: null,
+        collectionReport: null,
+        coursePaymentSummary: null,
+        courseStudentsPaymentStatus: []
+      }
+    });
+    console.log('🗑️ [Store] Cache cleared');
   },
 
-  // Filter methods
+  // ============================================================
+  // CLEAR OUTSTANDING REPORT CACHE
+  // ============================================================
+  clearOutstandingReportCache: () => {
+    set({
+      outstandingReport: null,
+      dataCache: {
+        ...get().dataCache,
+        outstandingReport: null
+      }
+    });
+    console.log('🗑️ [Store] Outstanding report cache cleared');
+  },
+
+  // ============================================================
+  // FORCE REFRESH OUTSTANDING REPORT
+  // ============================================================
+  refreshOutstandingReport: async (params = {}) => {
+    // Clear cache first
+    get().clearOutstandingReportCache();
+    // Then fetch fresh
+    return get().fetchOutstandingReport(params);
+  },
+
+  // ============================================================
+  // RESTORE FROM CACHE
+  // ============================================================
+  restoreFromCache: () => {
+    const cache = get().dataCache;
+    set({
+      payments: cache.payments || [],
+      paymentStats: cache.paymentStats,
+      outstandingReport: cache.outstandingReport,
+      collectionReport: cache.collectionReport,
+      coursePaymentSummary: cache.coursePaymentSummary,
+      courseStudentsPaymentStatus: cache.courseStudentsPaymentStatus
+    });
+    toast.success('Data restored from cache');
+  },
+
+  // ============================================================
+  // CLEAR SPECIFIC DATA
+  // ============================================================
+  clearCurrentPayment: () => {
+    set({ currentPayment: null });
+  },
+
+  clearStudentFeeSummary: () => {
+    set({ studentFeeSummary: null });
+  },
+
+  clearPaymentStats: () => {
+    set({ paymentStats: null });
+  },
+
+  clearOutstandingReport: () => {
+    set({ outstandingReport: null });
+  },
+
+  clearCollectionReport: () => {
+    set({ collectionReport: null });
+  },
+
+  clearCoursePaymentData: () => {
+    set({
+      coursePaymentSummary: null,
+      courseStudentsPaymentStatus: []
+    });
+  },
+
+  // ============================================================
+  // FILTER METHODS
+  // ============================================================
   setFilters: (filters) => {
     set({ filters: { ...get().filters, ...filters } });
   },
@@ -441,35 +597,9 @@ export const usePaymentStore = create((set, get) => ({
     });
   },
 
-  // Clear specific data
-  clearCurrentPayment: () => {
-    set({ currentPayment: null });
-  },
-
-  clearStudentFeeSummary: () => {
-    set({ studentFeeSummary: null });
-  },
-
-  clearPaymentStats: () => {
-    set({ paymentStats: null });
-  },
-
-  clearOutstandingReport: () => {
-    set({ outstandingReport: null });
-  },
-
-  clearCollectionReport: () => {
-    set({ collectionReport: null });
-  },
-
-  clearCoursePaymentData: () => {
-    set({
-      coursePaymentSummary: null,
-      courseStudentsPaymentStatus: []
-    });
-  },
-
-  // Reset entire store
+  // ============================================================
+  // RESET STORE
+  // ============================================================
   resetPaymentStore: () => {
     set({
       payments: [],
@@ -503,6 +633,15 @@ export const usePaymentStore = create((set, get) => ({
       },
       summary: {
         totalAmount: 0
+      },
+      // Keep cache but mark as stale
+      dataCache: {
+        payments: [],
+        paymentStats: null,
+        outstandingReport: null,
+        collectionReport: null,
+        coursePaymentSummary: null,
+        courseStudentsPaymentStatus: []
       }
     });
   }

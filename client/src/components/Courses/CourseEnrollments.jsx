@@ -55,6 +55,7 @@ const CourseEnrollments = () => {
   const [enrolling, setEnrolling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
 
   // Load initial data when component mounts
   useEffect(() => {
@@ -77,23 +78,44 @@ const CourseEnrollments = () => {
 
   const loadInitialData = async () => {
     setRefreshing(true);
+    setFetchError(null);
+    
     try {
-      await Promise.all([
-        fetchCourse(id),
-        fetchCourseEnrollments(id, activeView === 'all' ? '' : activeView)
-      ]);
-      setInitialLoadDone(true);
+      console.log('🔄 Loading initial data for course:', id);
+      
+      // Fetch course details
+      await fetchCourse(id);
+      
+      // Fetch enrollments - try with 'all' status first
+      console.log('📊 Fetching enrollments for course:', id);
+      const result = await fetchCourseEnrollments(id, 'all');
+      console.log('📊 Enrollment fetch result:', result);
+      
+      if (result.success) {
+        console.log('✅ Enrollments loaded:', result.data?.length || 0, 'records');
+        setInitialLoadDone(true);
+      } else {
+        console.error('❌ Failed to load enrollments:', result.message);
+        setFetchError(result.message);
+        toast.error('Failed to load enrollments: ' + result.message);
+      }
     } catch (error) {
-      console.error('Error loading initial data:', error);
-      toast.error('Failed to load enrollment data');
+      console.error('❌ Error loading initial data:', error);
+      setFetchError(error.message);
+      toast.error('Failed to load course data');
     } finally {
       setRefreshing(false);
     }
   };
 
   const loadEnrollmentsByView = async () => {
-    const status = activeView === 'all' ? '' : activeView;
-    await fetchCourseEnrollments(id, status);
+    const status = activeView === 'all' ? 'all' : activeView;
+    console.log('🔄 Loading enrollments with status:', status);
+    
+    const result = await fetchCourseEnrollments(id, status);
+    if (!result.success) {
+      console.error('❌ Failed to load enrollments for view:', status);
+    }
   };
 
   useEffect(() => {
@@ -111,42 +133,52 @@ const CourseEnrollments = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    setFetchError(null);
+    
     try {
+      console.log('🔄 Refreshing data...');
       await Promise.all([
         fetchCourse(id),
-        fetchCourseEnrollments(id, activeView === 'all' ? '' : activeView)
+        fetchCourseEnrollments(id, activeView === 'all' ? 'all' : activeView)
       ]);
       toast.success('Data refreshed');
     } catch (error) {
+      console.error('❌ Error refreshing:', error);
       toast.error('Failed to refresh data');
     } finally {
       setRefreshing(false);
     }
   };
 
-  const handleEnrollStudent = async (studentId, notes = '') => {
+  const handleEnrollStudent = async (studentId, notes = '', enrollmentData = {}) => {
     setEnrolling(true);
     try {
-      const result = await enrollStudent(id, studentId, notes);
+      console.log('🔄 Enrolling student:', studentId, 'with data:', enrollmentData);
+      
+      const result = await enrollStudent(id, studentId, notes, enrollmentData);
+      console.log('📊 Enroll result:', result);
       
       if (result.success) {
         setShowAddModal(false);
         setSearchTerm('');
         clearAvailableStudents();
         
+        // Refresh data after successful enrollment
         await Promise.all([
           fetchCourse(id),
-          fetchCourseEnrollments(id, activeView === 'all' ? '' : activeView)
+          fetchCourseEnrollments(id, activeView === 'all' ? 'all' : activeView)
         ]);
         
-        const admissionNumber = result.data?.admissionNumber;
+        const admissionNumber = result.data?.admissionNumber || result.data?.enrollment?.admissionNumber;
         const successMsg = admissionNumber 
           ? `Student enrolled successfully! Admission Number: ${admissionNumber}`
           : 'Student enrolled successfully!';
         toast.success(successMsg);
+      } else {
+        toast.error(result.message || 'Failed to enroll student');
       }
     } catch (error) {
-      console.error('Enroll error:', error);
+      console.error('❌ Enroll error:', error);
       toast.error('Failed to enroll student');
     } finally {
       setEnrolling(false);
@@ -159,42 +191,47 @@ const CourseEnrollments = () => {
     }
     
     try {
+      console.log('🔄 Removing student:', studentId);
       const result = await removeStudent(id, studentId);
       
       if (result.success) {
         await Promise.all([
           fetchCourse(id),
-          fetchCourseEnrollments(id, activeView === 'all' ? '' : activeView)
+          fetchCourseEnrollments(id, activeView === 'all' ? 'all' : activeView)
         ]);
         
         toast.success('Student removed from course successfully');
+      } else {
+        toast.error(result.message || 'Failed to remove student');
       }
     } catch (error) {
-      console.error('Remove student error:', error);
+      console.error('❌ Remove student error:', error);
       toast.error('Failed to remove student');
     }
   };
 
   const handleUpdateStatus = async (enrollmentId, data) => {
     try {
+      console.log('🔄 Updating enrollment:', enrollmentId, 'with data:', data);
       const result = await updateEnrollment(enrollmentId, data);
       
       if (result.success) {
         await Promise.all([
           fetchCourse(id),
-          fetchCourseEnrollments(id, activeView === 'all' ? '' : activeView)
+          fetchCourseEnrollments(id, activeView === 'all' ? 'all' : activeView)
         ]);
         
         toast.success(`Student status updated to ${data.status}`);
+      } else {
+        toast.error(result.message || 'Failed to update status');
       }
     } catch (error) {
-      console.error('Update status error:', error);
+      console.error('❌ Update status error:', error);
       toast.error('Failed to update status');
     }
   };
 
   const handleExportEnrollments = () => {
-    // FIXED: Ensure courseEnrollments is an array
     const enrollmentsArray = Array.isArray(courseEnrollments) ? courseEnrollments : [];
     
     if (enrollmentsArray.length === 0) {
@@ -205,10 +242,10 @@ const CourseEnrollments = () => {
     const headers = ['Admission Number', 'Student Name', 'Email', 'Enrollment Date', 'Status', 'Grade'];
     const csvData = enrollmentsArray.map(enrollment => [
       enrollment.admissionNumber || 'Not assigned',
-      enrollment.student?.user?.name || '',
-      enrollment.student?.user?.email || '',
+      enrollment.student?.user?.name || enrollment.studentName || 'N/A',
+      enrollment.student?.user?.email || 'N/A',
       new Date(enrollment.enrollmentDate).toLocaleDateString(),
-      enrollment.status,
+      enrollment.status || 'N/A',
       enrollment.grade || 'Not Graded'
     ]);
 
@@ -227,7 +264,6 @@ const CourseEnrollments = () => {
     toast.success('Enrollments exported successfully!');
   };
 
-  // FIXED: Calculate stats from enrollments with array check
   const getEnrollmentStats = () => {
     const enrollmentsArray = Array.isArray(courseEnrollments) ? courseEnrollments : [];
     
@@ -255,7 +291,9 @@ const CourseEnrollments = () => {
   const maxStudents = currentCourse?.maxStudents || 0;
   const isFull = enrolledCount >= maxStudents;
   const availableSpots = maxStudents > 0 ? maxStudents - enrolledCount : 0;
+  const enrollmentsArray = Array.isArray(courseEnrollments) ? courseEnrollments : [];
 
+  // Show loading state
   if (courseLoading && !currentCourse && !refreshing && !initialLoadDone) {
     return (
       <Layout>
@@ -264,6 +302,25 @@ const CourseEnrollments = () => {
             <Loader className="w-12 h-12 animate-spin text-purple-600 mx-auto" />
             <p className="mt-4 text-gray-600">Loading course data...</p>
           </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (fetchError && !enrollmentsArray.length && !refreshing) {
+    return (
+      <Layout>
+        <div className="text-center py-12">
+          <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
+          <h3 className="mt-4 text-lg font-medium text-gray-900">Error loading enrollments</h3>
+          <p className="mt-2 text-sm text-gray-500">{fetchError}</p>
+          <button
+            onClick={handleRefresh}
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Try Again
+          </button>
         </div>
       </Layout>
     );
@@ -290,9 +347,6 @@ const CourseEnrollments = () => {
     );
   }
 
-  // FIXED: Get enrollments array for rendering
-  const enrollmentsArray = Array.isArray(courseEnrollments) ? courseEnrollments : [];
-
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -313,6 +367,9 @@ const CourseEnrollments = () => {
                 </h1>
                 <p className="mt-2 text-gray-600">
                   {currentCourse?.courseCode} - {currentCourse?.name || 'Loading...'}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {stats.total} total enrollments • {stats.enrolled} active
                 </p>
               </div>
             </div>
@@ -390,7 +447,7 @@ const CourseEnrollments = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Admission Numbers Issued</p>
+                <p className="text-sm font-medium text-gray-600">Admission Numbers</p>
                 <p className="text-2xl font-bold text-purple-600 mt-2">{stats.withAdmissionNumber}</p>
                 {stats.withoutAdmissionNumber > 0 && (
                   <p className="text-xs text-orange-500 mt-1">
@@ -506,6 +563,27 @@ const CourseEnrollments = () => {
             courseId={id}
             view="course"
           />
+          
+          {enrollmentsArray.length === 0 && !enrollmentsLoading && !refreshing && (
+            <div className="text-center py-12">
+              <Users className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No enrollments found</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {activeView === 'all' 
+                  ? 'No students are enrolled in this course yet.'
+                  : `No ${activeView} students found.`}
+              </p>
+              {canManage && !isFull && (
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Add Student
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Capacity Progress */}

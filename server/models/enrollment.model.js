@@ -1,3 +1,5 @@
+// backend/models/enrollment.model.js - COMPLETE ORIGINAL STYLE
+
 import mongoose from 'mongoose';
 
 const enrollmentSchema = new mongoose.Schema({
@@ -21,8 +23,8 @@ const enrollmentSchema = new mongoose.Schema({
   },
   enrollmentDate: {
     type: Date,
-    default: Date.now,
-    required: true
+    required: [true, 'Enrollment date is required'],
+    default: Date.now
   },
   status: {
     type: String,
@@ -68,10 +70,9 @@ enrollmentSchema.index({ course: 1, status: 1 });
 enrollmentSchema.index({ student: 1, status: 1 });
 enrollmentSchema.index({ enrollmentDate: -1 });
 
-// Virtual for enrollment duration with ULTIMATE null checks
+// Virtual for enrollment duration
 enrollmentSchema.virtual('enrollmentDuration').get(function() {
   try {
-    // Safely get enrollment date
     const enrollmentDate = this.enrollmentDate;
     if (!enrollmentDate) return 0;
 
@@ -80,7 +81,6 @@ enrollmentSchema.virtual('enrollmentDuration').get(function() {
 
     const now = new Date().getTime();
 
-    // Handle dropped status
     if (this.status === 'dropped' && this.droppedDate) {
       const droppedTime = new Date(this.droppedDate).getTime();
       if (!isNaN(droppedTime)) {
@@ -88,7 +88,6 @@ enrollmentSchema.virtual('enrollmentDuration').get(function() {
       }
     }
     
-    // Handle completed status
     if (this.status === 'completed' && this.completedDate) {
       const completedTime = new Date(this.completedDate).getTime();
       if (!isNaN(completedTime)) {
@@ -96,7 +95,6 @@ enrollmentSchema.virtual('enrollmentDuration').get(function() {
       }
     }
     
-    // Handle enrolled status
     if (this.status === 'enrolled') {
       return Math.floor((now - enrollmentTime) / (1000 * 60 * 60 * 24));
     }
@@ -112,12 +110,10 @@ enrollmentSchema.virtual('enrollmentDuration').get(function() {
 enrollmentSchema.set('toJSON', { 
   virtuals: true,
   transform: function(doc, ret) {
-    // Remove any problematic fields if needed
     return ret;
   }
 });
 
-// Also set toObject
 enrollmentSchema.set('toObject', { 
   virtuals: true,
   transform: function(doc, ret) {
@@ -158,7 +154,8 @@ enrollmentSchema.statics.isStudentEnrolled = async function(studentId, courseId)
 
 // Static method to get active enrollments for a course
 enrollmentSchema.statics.getCourseEnrollments = function(courseId, status = 'enrolled') {
-  return this.find({ course: courseId, status })
+  const statusQuery = status === 'all' ? { $in: ['enrolled', 'completed'] } : { status };
+  return this.find({ course: courseId, ...statusQuery })
     .populate({
       path: 'student',
       select: 'studentId user',
@@ -173,7 +170,8 @@ enrollmentSchema.statics.getCourseEnrollments = function(courseId, status = 'enr
 
 // Static method to get student's enrolled courses
 enrollmentSchema.statics.getStudentEnrollments = function(studentId, status = 'enrolled') {
-  return this.find({ student: studentId, status })
+  const statusQuery = status === 'all' ? { $in: ['enrolled', 'completed'] } : { status };
+  return this.find({ student: studentId, ...statusQuery })
     .populate({
       path: 'course',
       select: 'courseCode name instructor schedule price',
@@ -191,13 +189,14 @@ enrollmentSchema.statics.getStudentAdmissionNumbers = async function(studentId) 
   try {
     const enrollments = await this.find({ 
       student: studentId,
-      status: 'enrolled'
+      status: { $in: ['enrolled', 'completed'] }
     }).populate('course', 'courseCode');
     
     return enrollments.map(enrollment => ({
       admissionNumber: enrollment.admissionNumber,
       courseCode: enrollment.course?.courseCode,
-      enrollmentId: enrollment._id
+      enrollmentId: enrollment._id,
+      status: enrollment.status
     }));
   } catch (error) {
     console.error('Error getting student admission numbers:', error);
@@ -218,10 +217,9 @@ enrollmentSchema.statics.getNextAdmissionNumber = async function(courseId) {
     const currentYear = new Date().getFullYear().toString().slice(-2);
     const courseCode = course.courseCode;
     
-    // Count existing enrollments for this course
     const count = await this.countDocuments({ 
       course: courseId,
-      status: 'enrolled'
+      status: { $in: ['enrolled', 'completed'] }
     });
     
     const sequentialNumber = String(count + 1).padStart(3, '0');
@@ -234,7 +232,7 @@ enrollmentSchema.statics.getNextAdmissionNumber = async function(courseId) {
   }
 };
 
-// Instance method to get enrollment summary with safe access
+// Instance method to get enrollment summary
 enrollmentSchema.methods.getSummary = function() {
   try {
     return {

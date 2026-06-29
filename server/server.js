@@ -26,6 +26,12 @@ import expenseCategoryRoutes from './routes/expenseCategory.route.js';
 import expenseRoutes from './routes/expense.route.js';
 import financialReportRoutes from './routes/financialReport.route.js';
 
+// Referral routes
+import referralRoutes from './routes/referral.route.js';
+
+// analytics routes
+import analyticsRoutes from './routes/analytics.route.js';
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -132,23 +138,25 @@ app.use('/api/directors', directorRoutes);
 app.use('/api/expense-categories', expenseCategoryRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/financial', financialReportRoutes);
+app.use('/api/referrals', referralRoutes); 
+app.use('/api/analytics', analyticsRoutes); 
 
-// ==================== ERROR HANDLING MIDDLEWARE ====================
-app.use((error, req, res, next) => {
-  const statusCode = error.statusCode || 500;
-  const message = error.message || "Internal Server Error";
-  console.error('Error:', error);
+// ==================== ERROR HANDLING MIDDLEWARE ==================== 
+app.use((error, req, res, next) => {  
+  const statusCode = error.statusCode || 500; 
+  const message = error.message || "Internal Server Error";   
+  console.error('Error:', error); 
   
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
-  }
+  const origin = req.headers.origin; 
+  if (allowedOrigins.includes(origin)) {   
+    res.header('Access-Control-Allow-Origin', origin); 
+  } 
   
-  res.status(statusCode).json({ 
+  res.status(statusCode).json({   
     statusCode, 
     success: false, 
-    message 
-  });
+    message  
+  });  
 });
 
 // ==================== 404 HANDLER - FIXED ====================

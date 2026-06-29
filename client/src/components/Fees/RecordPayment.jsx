@@ -64,7 +64,7 @@ const RecordPayment = () => {
     paymentMethod: 'mpesa',
     transactionId: '',
     paymentReference: '',
-    receiptNumber: '', // REMOVED auto-generation
+    receiptNumber: '',
     paymentFor: 'tuition',
     paymentDate: new Date().toISOString().split('T')[0],
     notes: '',
@@ -114,13 +114,13 @@ const RecordPayment = () => {
       if (selectedStudent && selectedStudent._id) {
         setFetchingFeeData(true);
         try {
-          console.log('Fetching fee summary for student:', selectedStudent._id);
+          console.log('🔄 Fetching fee summary for student:', selectedStudent._id);
           const result = await fetchStudentFeeSummary(selectedStudent._id);
-          console.log('Fee summary result:', result);
+          console.log('📊 Fee summary result:', result);
           
           if (result.success && result.data) {
             setStudentFeeData(result.data);
-            console.log('Student fee data set:', result.data);
+            console.log('✅ Student fee data set:', result.data);
           }
         } catch (error) {
           console.error('Error loading student fee summary:', error);
@@ -192,93 +192,80 @@ const RecordPayment = () => {
     }
   }, [selectedStudent, selectedCourse]);
 
-  // FIXED: Handle course selection - properly get outstanding balance
+  // FIXED: Handle course selection - properly calculate fee details
   const handleCourseSelection = async (course, student) => {
     setSelectedCourse(course);
+    setFetchingFeeData(true);
     
-    // Fetch fee details for this student and course
     try {
-      // First try to get from already loaded studentFeeData
-      let courseFee = null;
-      let outstandingAmount = course.price || 0;
-      let paidAmount = 0;
+      console.log('🔄 Calculating fee details for course:', course.courseCode);
+      console.log('🔄 Student:', student?.user?.name);
       
-      if (studentFeeData) {
-        // Check different possible structures
-        if (studentFeeData.paymentSummary?.courses) {
-          courseFee = studentFeeData.paymentSummary.courses.find(
-            c => c.courseId === course._id || c.courseCode === course.courseCode
-          );
-        } else if (studentFeeData.outstandingBalances) {
-          courseFee = studentFeeData.outstandingBalances.find(
-            c => c.courseId === course._id || c.courseCode === course.courseCode
-          );
-        } else if (studentFeeData.courses) {
-          courseFee = studentFeeData.courses.find(
-            c => c.courseId === course._id || c.courseCode === course.courseCode
-          );
+      // Get ALL payments for this student and course
+      const paymentsResponse = await fetch(`/api/payments?studentId=${student._id}&courseId=${course._id}&status=completed`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
-        
-        if (courseFee) {
-          paidAmount = courseFee.paid || courseFee.totalPaid || 0;
-          outstandingAmount = courseFee.balance || courseFee.remainingBalance || course.price;
-          console.log('Found course fee data:', { paidAmount, outstandingAmount });
-        }
+      });
+      const paymentsData = await paymentsResponse.json();
+      const payments = paymentsData.data || [];
+      
+      console.log('📊 Payments found:', payments.length);
+      
+      // Calculate total paid for this course
+      const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+      const coursePrice = course.price || 0;
+      const remainingBalance = Math.max(0, coursePrice - totalPaid);
+      const percentage = coursePrice > 0 ? Math.round((totalPaid / coursePrice) * 100) : 0;
+      
+      // Determine payment status
+      let status = 'unpaid';
+      if (totalPaid >= coursePrice) {
+        status = totalPaid > coursePrice ? 'overpaid' : 'paid';
+      } else if (totalPaid > 0) {
+        status = 'partial';
       }
       
-      // If not found in cached data, fetch directly
-      if (!courseFee && student?._id) {
-        const result = await fetchStudentFeeSummary(student._id);
-        if (result.success && result.data) {
-          setStudentFeeData(result.data);
-          
-          if (result.data.paymentSummary?.courses) {
-            courseFee = result.data.paymentSummary.courses.find(
-              c => c.courseId === course._id || c.courseCode === course.courseCode
-            );
-          } else if (result.data.outstandingBalances) {
-            courseFee = result.data.outstandingBalances.find(
-              c => c.courseId === course._id || c.courseCode === course.courseCode
-            );
-          }
-          
-          if (courseFee) {
-            paidAmount = courseFee.paid || courseFee.totalPaid || 0;
-            outstandingAmount = courseFee.balance || courseFee.remainingBalance || course.price;
-          }
-        }
-      }
-      
-      setCourseFeeDetails({
+      const feeDetails = {
         courseId: course._id,
         courseCode: course.courseCode,
         courseName: course.name,
-        price: course.price,
-        paid: paidAmount,
-        balance: outstandingAmount,
-        percentage: course.price > 0 ? (paidAmount / course.price) * 100 : 0,
-        status: outstandingAmount === 0 ? 'paid' : paidAmount > 0 ? 'partial' : 'unpaid'
-      });
+        price: coursePrice,
+        paid: totalPaid,
+        balance: remainingBalance,
+        percentage: percentage,
+        status: status,
+        paymentsCount: payments.length,
+        lastPaymentDate: payments.length > 0 ? payments[payments.length - 1]?.paymentDate : null
+      };
       
-      // FIXED: Auto-populate amount with outstanding balance
+      console.log('✅ Fee details calculated:', feeDetails);
+      setCourseFeeDetails(feeDetails);
+      
+      // Auto-populate amount with outstanding balance
       setFormData(prev => ({ 
         ...prev, 
-        amount: outstandingAmount > 0 ? outstandingAmount.toString() : '0'
+        amount: remainingBalance > 0 ? remainingBalance.toString() : '0'
       }));
       
     } catch (error) {
-      console.error('Error fetching fee details:', error);
+      console.error('Error calculating fee details:', error);
+      // Fallback: use course price only
       setCourseFeeDetails({
         courseId: course._id,
         courseCode: course.courseCode,
         courseName: course.name,
-        price: course.price,
+        price: course.price || 0,
         paid: 0,
-        balance: course.price,
+        balance: course.price || 0,
         percentage: 0,
-        status: 'unpaid'
+        status: 'unpaid',
+        paymentsCount: 0,
+        lastPaymentDate: null
       });
       setFormData(prev => ({ ...prev, amount: course.price?.toString() || '' }));
+    } finally {
+      setFetchingFeeData(false);
     }
   };
 
@@ -437,13 +424,16 @@ const RecordPayment = () => {
     );
   });
 
-  // Filter courses with outstanding balance calculation
+  // Filter courses - FIXED to show fee status
   const filteredCourses = courses.map(course => {
+    // Calculate fee status for this course if student is selected
     let outstandingBalance = course.price || 0;
     let paidAmount = 0;
     let paymentStatus = 'unpaid';
     
+    // Check if we have fee data for this course from the fetched student fee summary
     if (selectedStudent && studentFeeData) {
+      // Try different possible data structures
       let courseFee = null;
       
       if (studentFeeData.paymentSummary?.courses) {
@@ -452,6 +442,10 @@ const RecordPayment = () => {
         );
       } else if (studentFeeData.outstandingBalances) {
         courseFee = studentFeeData.outstandingBalances.find(
+          c => c.courseId === course._id || c.courseCode === course.courseCode
+        );
+      } else if (studentFeeData.courses) {
+        courseFee = studentFeeData.courses.find(
           c => c.courseId === course._id || c.courseCode === course.courseCode
         );
       }
@@ -619,7 +613,7 @@ const RecordPayment = () => {
           </div>
         )}
 
-        {/* Step 2: Select Course - Enhanced with outstanding balance */}
+        {/* Step 2: Select Course */}
         {step === 2 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-6 border-b border-gray-200 bg-gray-50">
@@ -783,7 +777,7 @@ const RecordPayment = () => {
                 </div>
               </div>
 
-              {/* Fee Balance Summary Card */}
+              {/* Fee Balance Summary Card - FIXED with accurate data */}
               {courseFeeDetails && (
                 <div className={`rounded-lg p-4 border ${
                   courseFeeDetails.balance > 0 
@@ -818,10 +812,16 @@ const RecordPayment = () => {
                       </p>
                     </div>
                   </div>
+                  {courseFeeDetails.paymentsCount > 0 && (
+                    <div className="mt-2 text-xs text-gray-500 text-center">
+                      {courseFeeDetails.paymentsCount} payment{courseFeeDetails.paymentsCount > 1 ? 's' : ''} made
+                      {courseFeeDetails.lastPaymentDate && ` • Last: ${new Date(courseFeeDetails.lastPaymentDate).toLocaleDateString()}`}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Receipt Number - NO AUTO-GENERATION */}
+              {/* Receipt Number */}
               <div>
                 <label htmlFor="receiptNumber" className="block text-sm font-medium text-gray-700 mb-2">
                   Receipt Number *
@@ -851,7 +851,7 @@ const RecordPayment = () => {
                 </p>
               </div>
 
-              {/* Amount - Pre-filled with outstanding balance */}
+              {/* Amount */}
               <div>
                 <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-2">
                   Amount *
@@ -885,7 +885,7 @@ const RecordPayment = () => {
                 )}
               </div>
 
-              {/* Payer Information Section */}
+              {/* Payer Information */}
               <div className="border-t border-gray-200 pt-4">
                 <h3 className="text-md font-medium text-gray-900 mb-4 flex items-center">
                   <Users className="w-4 h-4 mr-2 text-green-600" />

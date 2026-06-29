@@ -1,10 +1,10 @@
-// src/pages/Auth/Register.jsx - REDESIGNED TO MATCH LOGIN PAGE
+// src/pages/Auth/Register.jsx - COMPACT VERSION (No Vertical Scroll)
 
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuthStore } from '../../stores/authStore';
 import { useGoogleAuth } from '../../hooks/useGoogleAuth';
-import { Mail, Lock, Eye, EyeOff, User, UserPlus, Sparkles, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, User, UserPlus, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -27,14 +27,10 @@ const Register = () => {
   const { signInWithGoogle, loading: googleLoading } = useGoogleAuth();
   const navigate = useNavigate();
 
-  // Dynamically get current year
   const currentYear = new Date().getFullYear();
-
-  // Beautiful Unsplash image - Same as login page
   const IMAGE_URL = "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?ixlib=rb-4.0.3&auto=format&fit=crop&w=2070&q=80";
   const LOGO_URL = "/images/logo.png";
 
-  // Check form validity whenever formData changes
   useEffect(() => {
     const { name, email, password, confirmPassword } = formData;
     
@@ -108,7 +104,6 @@ const Register = () => {
 
   const handleLogoError = () => setLogoError(true);
 
-  // Animation variants (matching login page)
   const containerVariants = {
     hidden: { opacity: 0, y: 20 },
     visible: {
@@ -152,17 +147,16 @@ const Register = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-50 via-gray-50 to-zinc-100">
-      {/* Main Card Container */}
       <motion.div 
         initial="hidden"
         animate="visible"
         variants={containerVariants}
         className="w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden bg-white flex flex-col md:flex-row"
       >
-        {/* LEFT SIDE - IMAGE with overlay text */}
+        {/* LEFT SIDE - IMAGE (Hidden on mobile) */}
         <motion.div 
           variants={imageVariants}
-          className="hidden md:block md:w-1/2 relative overflow-hidden min-h-[550px]"
+          className="hidden md:block md:w-1/2 relative overflow-hidden min-h-[520px]"
         >
           <div className="absolute inset-0 bg-gradient-to-tr from-black/40 via-black/20 to-transparent z-10"></div>
           <img 
@@ -185,46 +179,46 @@ const Register = () => {
           </div>
         </motion.div>
 
-        {/* RIGHT SIDE - REGISTRATION FORM */}
+        {/* RIGHT SIDE - COMPACT REGISTRATION FORM */}
         <motion.div 
           variants={formVariants}
-          className="w-full md:w-1/2 p-5 sm:p-6 flex flex-col justify-center"
+          className="w-full md:w-1/2 p-4 sm:p-5 flex flex-col justify-center"
         >
-          {/* Logo */}
-          <motion.div variants={itemVariants} className="flex justify-center mb-3">
+          {/* Logo - Smaller */}
+          <motion.div variants={itemVariants} className="flex justify-center mb-2">
             {!logoError ? (
               <img
                 src={LOGO_URL}
                 alt="SBTC Logo"
-                className="h-12 w-auto object-contain"
+                className="h-10 w-auto object-contain"
                 onError={handleLogoError}
               />
             ) : (
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-sky-500 rounded-xl flex items-center justify-center shadow-md">
-                <span className="text-white font-bold text-lg">S</span>
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-sky-500 rounded-xl flex items-center justify-center shadow-md">
+                <span className="text-white font-bold text-base">S</span>
               </div>
             )}
           </motion.div>
 
-          {/* Form Title */}
-          <motion.div variants={itemVariants} className="text-center mb-4">
-            <h1 className="text-xl font-bold text-gray-800">Create Account</h1>
-            <p className="text-gray-500 text-xs mt-0.5">Join Serian Institute today</p>
+          {/* Form Title - Smaller */}
+          <motion.div variants={itemVariants} className="text-center mb-3">
+            <h1 className="text-lg font-bold text-gray-800">Create Account</h1>
+            <p className="text-gray-500 text-xs">Join Serian Institute today</p>
           </motion.div>
 
-          {/* Google Sign Up */}
+          {/* Google Sign Up - Compact */}
           <motion.button
             variants={itemVariants}
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleGoogleSignUp}
             disabled={googleLoading || isSubmitting}
-            className="w-full py-2 mb-3 flex items-center justify-center gap-2 border border-gray-200 rounded-lg hover:border-indigo-300 hover:shadow-sm transition-all duration-200 text-xs font-medium text-gray-700 bg-white"
+            className="w-full py-1.5 mb-2 flex items-center justify-center gap-2 border border-gray-200 rounded-lg hover:border-indigo-300 hover:shadow-sm transition-all duration-200 text-xs font-medium text-gray-700 bg-white"
           >
             {googleLoading ? (
               <div className="w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
             ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -234,65 +228,65 @@ const Register = () => {
             <span>Continue with Google</span>
           </motion.button>
 
-          {/* Divider */}
-          <motion.div variants={itemVariants} className="relative my-3">
+          {/* Divider - Compact */}
+          <motion.div variants={itemVariants} className="relative my-2">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
             <div className="relative flex justify-center text-[10px]"><span className="px-2 bg-white text-gray-400">OR</span></div>
           </motion.div>
 
-          {/* Registration Form */}
-          <motion.form variants={itemVariants} onSubmit={onFinish} className="space-y-3">
-            {/* Full Name */}
+          {/* Registration Form - More Compact */}
+          <motion.form variants={itemVariants} onSubmit={onFinish} className="space-y-2.5">
+            {/* Full Name - Compact */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-0.5">Full Name</label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <User className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
                   type="text"
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
+                  className="w-full pl-8 pr-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
                   placeholder="John Doe"
                   required
                 />
               </div>
             </div>
 
-            {/* Email */}
+            {/* Email - Compact */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-0.5">Email Address</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <Mail className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
+                  className="w-full pl-8 pr-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
                   placeholder="you@example.com"
                   required
                 />
               </div>
             </div>
 
-            {/* Role Selection */}
+            {/* Role Selection - Compact */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-0.5">I am a</label>
               <div className="relative">
-                <UserPlus className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <UserPlus className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <select
                   name="role"
                   value={formData.role}
                   onChange={handleChange}
-                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none appearance-none bg-white"
+                  className="w-full pl-8 pr-6 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none appearance-none bg-white"
                 >
                   <option value="student">Student</option>
                   <option value="parent">Parent</option>
                   <option value="teacher">Teacher</option>
                   <option value="admin">Administrator</option>
                 </select>
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                <div className="absolute right-2.5 top-1/2 transform -translate-y-1/2 pointer-events-none">
                   <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
@@ -300,17 +294,17 @@ const Register = () => {
               </div>
             </div>
 
-            {/* Password */}
+            {/* Password - Compact */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-0.5">Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <Lock className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
                   type={showPassword ? "text" : "password"}
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
+                  className="w-full pl-8 pr-7 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
                   placeholder="Create password (min. 6 characters)"
                   minLength={6}
                   required
@@ -318,47 +312,47 @@ const Register = () => {
                 <button
                   type="button"
                   onClick={togglePasswordVisibility}
-                  className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-indigo-500 transition-colors"
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-indigo-500 transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </div>
 
-            {/* Confirm Password */}
+            {/* Confirm Password - Compact */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-0.5">Confirm Password</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <Lock className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
                   type={showConfirmPassword ? "text" : "password"}
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleChange}
-                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
+                  className="w-full pl-8 pr-7 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 outline-none transition-all"
                   placeholder="Confirm your password"
                   required
                 />
                 <button
                   type="button"
                   onClick={toggleConfirmPasswordVisibility}
-                  className="absolute right-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-indigo-500 transition-colors"
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-indigo-500 transition-colors"
                 >
                   {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
               {passwordError && (
-                <p className="mt-1 text-xs text-red-600">{passwordError}</p>
+                <p className="mt-0.5 text-[10px] text-red-600">{passwordError}</p>
               )}
             </div>
 
-            {/* Register Button */}
+            {/* Register Button - Compact */}
             <motion.button
               whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
               type="submit"
               disabled={!isFormValid || isSubmitting || googleLoading}
-              className="w-full py-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-1.5 mt-1 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-lg font-semibold text-sm shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -368,8 +362,8 @@ const Register = () => {
             </motion.button>
           </motion.form>
 
-          {/* Login Link */}
-          <motion.div variants={itemVariants} className="mt-4 text-center">
+          {/* Login Link - Compact */}
+          <motion.div variants={itemVariants} className="mt-3 text-center">
             <p className="text-xs text-gray-500">
               Already have an account?{' '}
               <Link to="/login" className="text-indigo-600 hover:text-indigo-700 font-medium hover:underline">
@@ -378,9 +372,9 @@ const Register = () => {
             </p>
           </motion.div>
 
-          {/* Footer with Dynamic Year */}
-          <motion.p variants={itemVariants} className="text-center text-[10px] text-gray-400 mt-5">
-            By creating an account, you agree to our Terms of Service and Privacy Policy.
+          {/* Footer - Compact */}
+          <motion.p variants={itemVariants} className="text-center text-[10px] text-gray-400 mt-3">
+            By creating an account, you agree to our Terms of Service.
           </motion.p>
         </motion.div>
       </motion.div>

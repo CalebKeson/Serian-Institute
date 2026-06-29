@@ -1,4 +1,5 @@
-// src/components/Enrollment/AddStudentModal.jsx
+// src/components/Enrollment/AddStudentModal.jsx - COMPLETE WITH HISTORICAL DATE PICKER
+
 import React, { useState } from 'react';
 import { 
   X, 
@@ -8,7 +9,9 @@ import {
   Mail, 
   Phone,
   Check,
-  AlertCircle
+  AlertCircle,
+  Calendar,
+  Clock
 } from 'lucide-react';
 
 const AddStudentModal = ({
@@ -22,15 +25,32 @@ const AddStudentModal = ({
 }) => {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [notes, setNotes] = useState('');
+  const [enrollmentDate, setEnrollmentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isHistoricalEnrollment, setIsHistoricalEnrollment] = useState(false);
 
   const handleEnroll = () => {
     if (selectedStudent) {
-      onEnrollStudent(selectedStudent._id, notes);
+      // Pass enrollment date if it's a historical enrollment
+      const enrollmentData = {
+        studentId: selectedStudent._id,
+        notes: notes,
+        ...(isHistoricalEnrollment && enrollmentDate && { enrollmentDate })
+      };
+      onEnrollStudent(selectedStudent._id, notes, enrollmentData);
     }
   };
 
   const handleStudentSelect = (student) => {
     setSelectedStudent(student);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
   };
 
   return (
@@ -150,20 +170,95 @@ const AddStudentModal = ({
           )}
         </div>
 
-        {/* Notes Section */}
+        {/* Historical Enrollment Section */}
+        {selectedStudent && course.availableSpots > 0 && (
+          <div className="mb-6 border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-md font-medium text-gray-900 flex items-center">
+                <Calendar className="w-4 h-4 mr-2 text-purple-600" />
+                Enrollment Details
+              </h3>
+              <label className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={isHistoricalEnrollment}
+                  onChange={(e) => setIsHistoricalEnrollment(e.target.checked)}
+                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                />
+                <span className="text-sm text-gray-600">Historical enrollment (past date)</span>
+              </label>
+            </div>
+
+            {/* Date Picker for Historical Enrollment */}
+            {isHistoricalEnrollment && (
+              <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-start">
+                  <Clock className="w-5 h-5 text-yellow-600 mt-0.5 mr-3" />
+                  <div className="flex-1">
+                    <label htmlFor="enrollmentDate" className="block text-sm font-medium text-gray-700 mb-2">
+                      Enrollment Date *
+                    </label>
+                    <input
+                      type="date"
+                      id="enrollmentDate"
+                      value={enrollmentDate}
+                      onChange={(e) => setEnrollmentDate(e.target.value)}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    />
+                    <p className="mt-2 text-xs text-yellow-700">
+                      <AlertCircle className="w-3 h-3 inline mr-1" />
+                      Setting a past date will record this enrollment as a historical enrollment.
+                      The admission number will be generated sequentially based on current enrollments.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Current Date Display (when not historical) */}
+            {!isHistoricalEnrollment && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg flex items-center">
+                <Calendar className="w-4 h-4 text-gray-500 mr-2" />
+                <span className="text-sm text-gray-600">
+                  Enrollment will be recorded with today's date: <strong>{new Date().toLocaleDateString()}</strong>
+                </span>
+              </div>
+            )}
+
+            {/* Notes Section */}
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+                Enrollment Notes (Optional)
+              </label>
+              <textarea
+                id="notes"
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
+                placeholder="Add any notes about this enrollment (e.g., transfer student, special circumstances, etc.)"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Info Box about Admission Numbers */}
         {selectedStudent && (
-          <div className="mb-6">
-            <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-              Enrollment Notes (Optional)
-            </label>
-            <textarea
-              id="notes"
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors"
-              placeholder="Add any notes about this enrollment..."
-            />
+          <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-3">
+            <div className="flex items-start">
+              <AlertCircle className="w-4 h-4 text-purple-600 mt-0.5 mr-2" />
+              <div className="text-xs text-purple-700">
+                <p className="font-medium mb-1">About Admission Numbers:</p>
+                <p>
+                  Admission numbers are automatically generated in format: <strong>{course.courseCode}/XXX/YY</strong>
+                  (e.g., {course.courseCode}/001/{new Date().getFullYear().toString().slice(-2)})
+                </p>
+                <p className="mt-1">
+                  The sequence number is based on total enrollments in this course, not the enrollment date.
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
@@ -178,9 +273,19 @@ const AddStudentModal = ({
           <button
             onClick={handleEnroll}
             disabled={!selectedStudent || loading || course.availableSpots === 0}
-            className="px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-700 hover:from-purple-700 hover:to-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center"
           >
-            {loading ? 'Enrolling...' : 'Enroll Student'}
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Enrolling...
+              </>
+            ) : (
+              <>
+                <UserPlus className="w-4 h-4 mr-2" />
+                {isHistoricalEnrollment ? 'Enroll with Historical Date' : 'Enroll Student'}
+              </>
+            )}
           </button>
         </div>
       </div>

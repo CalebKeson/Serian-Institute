@@ -1,4 +1,5 @@
-// src/App.jsx
+// src/App.jsx - UPDATED WITH CORRECT PATHS FOR ENQUIRY FILES
+
 import React, { useEffect } from "react";
 import {
   RouterProvider,
@@ -20,6 +21,9 @@ import Login from "./pages/Auth/Login";
 import Register from "./pages/Auth/Register";
 import ForgotPassword from "./pages/Auth/ForgotPassword";
 import ResetPassword from "./pages/Auth/ResetPassword";
+
+// Landing Page
+import LandingPage from "./pages/Landing/LandingPage";
 
 // Dashboard
 import Dashboard from "./pages/Dashboard/Dashboard";
@@ -91,9 +95,19 @@ import ProfitLoss from "./pages/Reports/ProfitLoss";
 import CashFlow from "./pages/Reports/CashFlow";
 import BudgetVsActual from "./pages/Reports/BudgetVsActual";
 
-// Other pages
+// Referral Pages
+import ReferralReport from "./pages/Reports/ReferralReport";
+import ReferrerManagement from "./pages/Referrals/ReferrerManagement";
+
+// Request Pages
 import Requests from "./pages/Requests/Requests";
 import RequestDetails from "./components/Requests/RequestDetails";
+
+// ============ ENQUIRY PAGES (Updated Paths) ============
+import EnquiryList from "./components/Enquiry/EnquiryList";
+import EnquiryAnalytics from "./components/Enquiry/EnquiryAnalytics";
+
+// Other pages
 import Profile from "./pages/Profile/Profile";
 import Settings from "./pages/Settings/Settings";
 import Notifications from "./pages/Notifications/Notifications";
@@ -123,7 +137,7 @@ const AppLayout = () => {
   );
 };
 
-// Protected Route component
+// Protected Route component - redirects to login if not authenticated
 const ProtectedRoute = ({ children }) => {
   const user = useAuthStore((state) => state.user);
   if (!user) {
@@ -132,7 +146,7 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-// Public Route component (redirect if already logged in)
+// Public Route component - redirects to dashboard if already logged in
 const PublicRoute = ({ children }) => {
   const user = useAuthStore((state) => state.user);
   if (user) {
@@ -196,7 +210,19 @@ const AppRouter = () => {
   const router = createBrowserRouter(
     createRoutesFromElements(
       <Route element={<AppLayout />}>
-        {/* ============= PUBLIC ROUTES ============= */}
+        {/* ============= PUBLIC ROUTES (No Authentication Required) ============= */}
+        
+        {/* Landing Page - Root path '/' */}
+        <Route
+          path="/"
+          element={
+            <PublicRoute>
+              <LandingPage />
+            </PublicRoute>
+          }
+        />
+        
+        {/* Auth Pages */}
         <Route
           path="/login"
           element={
@@ -230,7 +256,9 @@ const AppRouter = () => {
           }
         />
 
-        {/* ============= DASHBOARD ============= */}
+        {/* ============= PROTECTED ROUTES (Authentication Required) ============= */}
+        
+        {/* Dashboard - Protected */}
         <Route
           path="/dashboard"
           element={
@@ -716,6 +744,50 @@ const AppRouter = () => {
           }
         />
 
+        {/* ============= REFERRAL ROUTES ============= */}
+        <Route
+          path="/referral-report"
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRoles={["admin"]}>
+                <ReferralReport />
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/referrers"
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRoles={["admin"]}>
+                <ReferrerManagement />
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ============= ENQUIRY ROUTES ============= */}
+        <Route
+          path="/enquiries"
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRoles={["admin"]}>
+                <EnquiryList />
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/enquiry-analytics"
+          element={
+            <ProtectedRoute>
+              <RoleRoute allowedRoles={["admin"]}>
+                <EnquiryAnalytics />
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
+
         {/* ============= REQUEST MANAGEMENT ============= */}
         <Route
           path="/requests"
@@ -761,8 +833,8 @@ const AppRouter = () => {
         />
 
         {/* ============= DEFAULT REDIRECTS ============= */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Any unknown routes go to landing page */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>,
     ),
   );

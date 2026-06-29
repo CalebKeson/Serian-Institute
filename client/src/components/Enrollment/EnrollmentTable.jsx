@@ -1,4 +1,4 @@
-// src/components/Enrollment/EnrollmentTable.jsx - UPDATED with admission numbers
+// src/components/Enrollment/EnrollmentTable.jsx - COMPLETE FIXED DROPDOWN AS POPUP
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -31,13 +31,20 @@ const EnrollmentTable = ({
 }) => {
   const [showActionsMenu, setShowActionsMenu] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const menuRef = useRef(null);
+  const buttonRefs = useRef({});
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setShowActionsMenu(null);
+      const menuElement = menuRef.current;
+      const buttonElement = buttonRefs.current[showActionsMenu];
+      
+      if (menuElement && !menuElement.contains(event.target)) {
+        if (buttonElement && !buttonElement.contains(event.target)) {
+          setShowActionsMenu(null);
+        }
       }
     };
 
@@ -45,7 +52,32 @@ const EnrollmentTable = ({
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
+  }, [showActionsMenu]);
+
+  // Close dropdown on escape key
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setShowActionsMenu(null);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
   }, []);
+
+  // Calculate dropdown position when opened
+  useEffect(() => {
+    if (showActionsMenu) {
+      const button = buttonRefs.current[showActionsMenu];
+      if (button) {
+        const rect = button.getBoundingClientRect();
+        // Position dropdown below the button with some offset
+        const top = rect.bottom + window.scrollY + 4;
+        const left = rect.right - 220; // Align right edge with button
+        setDropdownPosition({ top, left });
+      }
+    }
+  }, [showActionsMenu]);
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -120,7 +152,6 @@ const EnrollmentTable = ({
     );
   };
 
-  // NEW: Get admission number display
   const getAdmissionNumberDisplay = (admissionNumber) => {
     if (!admissionNumber) {
       return (
@@ -135,13 +166,12 @@ const EnrollmentTable = ({
         <code className="text-sm font-mono font-medium text-purple-700 bg-purple-50 px-2 py-1 rounded">
           {admissionNumber}
         </code>
-        <span className="text-xs text-gray-500 mt-0.5">Admission Number</span>
       </div>
     );
   };
 
   const handleRemoveClick = async (enrollment) => {
-    const studentName = enrollment.student?.user?.name || 'this student';
+    const studentName = enrollment.student?.user?.name || enrollment.studentName || 'this student';
     if (window.confirm(`Are you sure you want to remove ${studentName} from this course?`)) {
       setActionLoading(true);
       try {
@@ -165,10 +195,14 @@ const EnrollmentTable = ({
 
   const toggleActionsMenu = (enrollmentId, e) => {
     e.stopPropagation();
-    setShowActionsMenu(showActionsMenu === enrollmentId ? null : enrollmentId);
+    if (showActionsMenu === enrollmentId) {
+      setShowActionsMenu(null);
+    } else {
+      setShowActionsMenu(enrollmentId);
+      // Position will be calculated by the useEffect
+    }
   };
 
-  // Check if user can manage enrollments
   const canManage = ['admin', 'instructor', 'receptionist'].includes(currentUser?.role);
 
   if (loading || actionLoading) {
@@ -187,14 +221,14 @@ const EnrollmentTable = ({
     );
   }
 
-  if (enrollments.length === 0) {
+  if (!enrollments || enrollments.length === 0) {
     return (
       <div className="text-center py-12">
         <User className="mx-auto h-12 w-12 text-gray-400" />
         <h3 className="mt-2 text-sm font-medium text-gray-900">No enrollments found</h3>
         <p className="mt-1 text-sm text-gray-500">
           {view === 'course' 
-            ? 'No students match the selected filter.'
+            ? 'No students are enrolled in this course yet.'
             : 'This student has no enrollments matching the selected filter.'}
         </p>
       </div>
@@ -202,7 +236,7 @@ const EnrollmentTable = ({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-300">
         <thead className="bg-gray-50">
           <tr>
@@ -256,169 +290,187 @@ const EnrollmentTable = ({
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {enrollments.map((enrollment) => (
-            <tr key={enrollment._id} className="hover:bg-gray-50 transition-colors">
-              {view === 'course' ? (
-                <>
-                  {/* Student Info Column */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center">
-                        <span className="text-white font-medium text-sm">
-                          {enrollment.student?.user?.name?.charAt(0).toUpperCase() || '?'}
-                        </span>
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {enrollment.student?.user?.name || 'Unknown Student'}
+          {enrollments.map((enrollment) => {
+            const studentName = enrollment.student?.user?.name || enrollment.studentName || 'Unknown Student';
+            const studentId = enrollment.student?.studentId || enrollment.studentId || 'N/A';
+            const studentEmail = enrollment.student?.user?.email || 'N/A';
+            const courseName = enrollment.course?.name || enrollment.courseName || 'N/A';
+            const courseCode = enrollment.course?.courseCode || enrollment.courseCode || 'N/A';
+            const instructorName = enrollment.course?.instructor?.name || 'Unassigned';
+            
+            return (
+              <tr key={enrollment._id} className="hover:bg-gray-50 transition-colors">
+                {view === 'course' ? (
+                  <>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center">
+                          <span className="text-white font-medium text-sm">
+                            {studentName?.charAt(0).toUpperCase() || '?'}
+                          </span>
                         </div>
-                        <div className="text-sm text-gray-500 flex items-center">
-                          <Mail className="w-3 h-3 mr-1" />
-                          {enrollment.student?.user?.email || 'No email'}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* NEW: Admission Number Column */}
-                  <td className="px-6 py-4">
-                    {getAdmissionNumberDisplay(enrollment.admissionNumber)}
-                  </td>
-
-                  {/* Enrollment Date Column */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 flex items-center">
-                      <Calendar className="w-4 h-4 mr-2 text-blue-500" />
-                      {formatDate(enrollment.enrollmentDate)}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      By: {enrollment.enrolledBy?.name || 'System'}
-                    </div>
-                  </td>
-                </>
-              ) : (
-                <>
-                  {/* Course Info Column */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center">
-                      <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-purple-600 to-indigo-700 rounded-lg flex items-center justify-center">
-                        <span className="text-white font-medium text-sm">
-                          {enrollment.course?.courseCode?.charAt(0) || 'C'}
-                        </span>
-                      </div>
-                      <div className="ml-4">
-                        <button
-                          onClick={() => onViewCourse && onViewCourse(enrollment.course?._id)}
-                          className="text-sm font-medium text-gray-900 hover:text-purple-600 hover:underline text-left"
-                        >
-                          {enrollment.course?.courseCode} - {enrollment.course?.name}
-                        </button>
-                        <div className="text-sm text-gray-500">
-                          Instructor: {enrollment.course?.instructor?.name || 'Unassigned'}
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {studentName}
+                          </div>
+                          <div className="text-sm text-gray-500 flex items-center">
+                            <Mail className="w-3 h-3 mr-1" />
+                            {studentEmail}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            ID: {studentId}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-
-                  {/* NEW: Admission Number Column */}
-                  <td className="px-6 py-4">
-                    {getAdmissionNumberDisplay(enrollment.admissionNumber)}
-                  </td>
-
-                  {/* Enrollment Date Column */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900 flex items-center">
-                      <Calendar className="w-4 h-4 mr-2 text-blue-500" />
-                      {formatDate(enrollment.enrollmentDate)}
-                    </div>
-                  </td>
-                </>
-              )}
-
-              {/* Status Column */}
-              <td className="px-6 py-4 whitespace-nowrap">
-                {getStatusBadge(enrollment.status)}
-              </td>
-
-              {/* Grade Column */}
-              <td className="px-6 py-4 whitespace-nowrap">
-                {getGradeBadge(enrollment.grade)}
-              </td>
-
-              {/* Actions Column */}
-              {canManage && (
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium relative">
-                  <button
-                    onClick={(e) => toggleActionsMenu(enrollment._id, e)}
-                    disabled={actionLoading}
-                    className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
-                    title="Actions"
-                  >
-                    <MoreVertical className="w-5 h-5" />
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {showActionsMenu === enrollment._id && (
-                    <div 
-                      ref={menuRef}
-                      className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 border border-gray-200"
-                    >
-                      <div className="py-1" role="menu">
-                        {enrollment.status === 'enrolled' && (
-                          <>
-                            <button
-                              onClick={() => handleStatusChange(enrollment, 'completed')}
-                              disabled={actionLoading}
-                              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
-                              role="menuitem"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-3 text-green-500" />
-                              Mark as Completed
-                            </button>
-                            <button
-                              onClick={() => handleStatusChange(enrollment, 'dropped')}
-                              disabled={actionLoading}
-                              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
-                              role="menuitem"
-                            >
-                              <UserMinus className="w-4 h-4 mr-3 text-red-500" />
-                              Mark as Dropped
-                            </button>
-                          </>
-                        )}
-                        
-                        {(enrollment.status === 'completed' || enrollment.status === 'dropped') && (
+                    </td>
+                    <td className="px-6 py-4">
+                      {getAdmissionNumberDisplay(enrollment.admissionNumber)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900 flex items-center">
+                        <Calendar className="w-4 h-4 mr-2 text-blue-500" />
+                        {formatDate(enrollment.enrollmentDate)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        By: {enrollment.enrolledBy?.name || 'System'}
+                      </div>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <div className="h-10 w-10 flex-shrink-0 bg-gradient-to-r from-purple-600 to-indigo-700 rounded-lg flex items-center justify-center">
+                          <span className="text-white font-medium text-sm">
+                            {courseCode?.charAt(0) || 'C'}
+                          </span>
+                        </div>
+                        <div className="ml-4">
                           <button
-                            onClick={() => handleStatusChange(enrollment, 'enrolled')}
-                            disabled={actionLoading}
-                            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
-                            role="menuitem"
+                            onClick={() => onViewCourse && onViewCourse(enrollment.course?._id)}
+                            className="text-sm font-medium text-gray-900 hover:text-purple-600 hover:underline text-left"
                           >
-                            <RefreshCw className="w-4 h-4 mr-3 text-blue-500" />
-                            Re-enroll Student
+                            {courseCode} - {courseName}
                           </button>
-                        )}
-                        
-                        <div className="border-t border-gray-100 my-1"></div>
-                        
-                        <button
-                          onClick={() => handleRemoveClick(enrollment)}
-                          disabled={actionLoading}
-                          className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                          role="menuitem"
-                        >
-                          <Trash2 className="w-4 h-4 mr-3" />
-                          Remove from Course
-                        </button>
+                          <div className="text-sm text-gray-500">
+                            Instructor: {instructorName}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {getAdmissionNumberDisplay(enrollment.admissionNumber)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900 flex items-center">
+                        <Calendar className="w-4 h-4 mr-2 text-blue-500" />
+                        {formatDate(enrollment.enrollmentDate)}
+                      </div>
+                    </td>
+                  </>
+                )}
+
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {getStatusBadge(enrollment.status)}
                 </td>
-              )}
-            </tr>
-          ))}
+
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {getGradeBadge(enrollment.grade)}
+                </td>
+
+                {canManage && (
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="relative inline-block">
+                      <button
+                        ref={(el) => (buttonRefs.current[enrollment._id] = el)}
+                        onClick={(e) => toggleActionsMenu(enrollment._id, e)}
+                        disabled={actionLoading}
+                        className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
+                        title="Actions"
+                      >
+                        <MoreVertical className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+
+      {/* Dropdown Menu - Positioned absolutely as a clean popup */}
+      {showActionsMenu && (
+        <div 
+          ref={menuRef}
+          className="fixed z-[9999] bg-white rounded-lg shadow-2xl border border-gray-200 py-1 min-w-[220px] max-w-[280px] animate-in fade-in duration-200"
+          style={{
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+          }}
+        >
+          <div className="py-1" role="menu">
+            {enrollments.find(e => e._id === showActionsMenu)?.status === 'enrolled' && (
+              <>
+                <button
+                  onClick={() => {
+                    const enrollment = enrollments.find(e => e._id === showActionsMenu);
+                    if (enrollment) handleStatusChange(enrollment, 'completed');
+                  }}
+                  disabled={actionLoading}
+                  className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                  role="menuitem"
+                >
+                  <CheckCircle className="w-4 h-4 mr-3 text-green-500 flex-shrink-0" />
+                  <span>Mark as Completed</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const enrollment = enrollments.find(e => e._id === showActionsMenu);
+                    if (enrollment) handleStatusChange(enrollment, 'dropped');
+                  }}
+                  disabled={actionLoading}
+                  className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                  role="menuitem"
+                >
+                  <UserMinus className="w-4 h-4 mr-3 text-red-500 flex-shrink-0" />
+                  <span>Mark as Dropped</span>
+                </button>
+              </>
+            )}
+            
+            {enrollments.find(e => e._id === showActionsMenu)?.status !== 'enrolled' && (
+              <button
+                onClick={() => {
+                  const enrollment = enrollments.find(e => e._id === showActionsMenu);
+                  if (enrollment) handleStatusChange(enrollment, 'enrolled');
+                }}
+                disabled={actionLoading}
+                className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                role="menuitem"
+              >
+                <RefreshCw className="w-4 h-4 mr-3 text-blue-500 flex-shrink-0" />
+                <span>Re-enroll Student</span>
+              </button>
+            )}
+            
+            <div className="border-t border-gray-100 my-1"></div>
+            
+            <button
+              onClick={() => {
+                const enrollment = enrollments.find(e => e._id === showActionsMenu);
+                if (enrollment) handleRemoveClick(enrollment);
+              }}
+              disabled={actionLoading}
+              className="flex items-center w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+              role="menuitem"
+            >
+              <Trash2 className="w-4 h-4 mr-3 text-red-500 flex-shrink-0" />
+              <span>Remove from Course</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,4 +1,5 @@
-// routes/request.route.js
+// routes/request.route.js - COMPLETE UPDATED VERSION
+
 import express from 'express';
 import {
   createRequest,
@@ -10,13 +11,19 @@ import {
   getRequestStats,
   getStaffMembers,
   assignRequest,
-  getTodayRequestCount
+  getTodayRequestCount,
+  submitEnquiry,           // NEW
+  convertEnquiryToVisit    // NEW
 } from '../controllers/request.controller.js';
 import { auth } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// All routes require authentication
+// ============ PUBLIC ROUTE (No Authentication) ============
+// Submit online enquiry - accessible to everyone
+router.post('/enquiry', submitEnquiry);
+
+// ============ PROTECTED ROUTES (Authentication Required) ============
 router.use(auth);
 
 // Routes accessible to both admin and receptionist
@@ -67,6 +74,15 @@ router.delete('/:id', (req, res, next) => {
   next();
 }, deleteRequest);
 
-
+// NEW: Convert online enquiry to physical visit
+router.post('/:id/convert-to-visit', (req, res, next) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'receptionist') {
+    return res.status(403).json({
+      success: false,
+      message: 'Admin or receptionist privileges required'
+    });
+  }
+  next();
+}, convertEnquiryToVisit);
 
 export default router;

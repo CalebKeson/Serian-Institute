@@ -1,3 +1,5 @@
+// backend/models/course.model.js - COMPLETE WITH BATCH SUPPORT
+
 import mongoose from 'mongoose';
 
 const courseSchema = new mongoose.Schema({
@@ -30,6 +32,24 @@ const courseSchema = new mongoose.Schema({
     required: [true, 'Duration is required'],
     enum: ['1 month', '3 months', '6 months', '1 year', '2 years']
   },
+  
+  // Batch/Year identification fields for Option A
+  batchYear: {
+    type: String,
+    required: [true, 'Batch year is required'],
+    match: [/^\d{4}$/, 'Year must be 4 digits (e.g., 2024)'],
+    default: () => new Date().getFullYear().toString()
+  },
+  batchNumber: {
+    type: String,
+    required: [true, 'Batch number is required'],
+    trim: true
+  },
+  batchDisplayName: {
+    type: String,
+    trim: true
+  },
+  
   intakeMonth: {
     type: String,
     required: [true, 'Intake month is required'],
@@ -41,11 +61,7 @@ const courseSchema = new mongoose.Schema({
     required: [true, 'Intake year is required'],
     match: [/^\d{4}$/, 'Year must be 4 digits (e.g., 2024)']
   },
-  batchNumber: {
-    type: String,
-    required: [true, 'Batch number is required'],
-    trim: true
-  },
+  
   instructor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -144,15 +160,16 @@ const courseSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// REMOVED: The pre('save') middleware that auto-generated courseCode
-
 // Indexes
 courseSchema.index({ instructor: 1 });
 courseSchema.index({ courseType: 1 });
 courseSchema.index({ intakeMonth: 1 });
 courseSchema.index({ status: 1 });
 courseSchema.index({ price: 1 });
-courseSchema.index({ courseCode: 1 }); // Added index for courseCode
+courseSchema.index({ courseCode: 1 });
+courseSchema.index({ batchYear: 1 });
+courseSchema.index({ batchNumber: 1 });
+courseSchema.index({ batchYear: 1, batchNumber: 1 });
 
 // Virtual for enrolled students count
 courseSchema.virtual('enrolledCount').get(function() {
@@ -199,7 +216,7 @@ courseSchema.virtual('isFull').get(function() {
   }
 });
 
-// Virtual for course display name
+// Virtual for course display name with batch info
 courseSchema.virtual('displayName').get(function() {
   try {
     const typeNames = {
@@ -210,8 +227,8 @@ courseSchema.virtual('displayName').get(function() {
       cna: 'Certified Nursing Assistant'
     };
     const typeName = typeNames[this.courseType] || this.courseType || 'Unknown';
-    const courseName = this.name || 'Unnamed Course';
-    return `${typeName} - ${courseName}`;
+    const batchInfo = this.batchDisplayName || `Batch ${this.batchNumber} (${this.batchYear})`;
+    return `${typeName} - ${this.name} (${batchInfo})`;
   } catch (error) {
     console.error('Error in displayName virtual:', error);
     return this.name || 'Unknown Course';
@@ -224,7 +241,8 @@ courseSchema.virtual('intakeDisplay').get(function() {
     const month = this.intakeMonth || 'Unknown';
     const year = this.intakeYear || 'Year';
     const batch = this.batchNumber || 'Batch';
-    return `${month} ${year} (${batch})`;
+    const batchYear = this.batchYear || year;
+    return `${month} ${year} - Batch ${batch} (${batchYear})`;
   } catch (error) {
     console.error('Error in intakeDisplay virtual:', error);
     return 'Intake information unavailable';
@@ -252,19 +270,38 @@ courseSchema.virtual('formattedPrice').get(function() {
   return `KSh ${this.price?.toLocaleString() || '0'}`;
 });
 
-// Static method to find courses by instructor
-courseSchema.statics.findByInstructor = function(instructorId) {
-  return this.find({ instructor: instructorId }).populate('instructor', 'name email');
+// Virtual for batch/year summary
+courseSchema.virtual('batchSummary').get(function() {
+  return `${this.batchNumber} - ${this.batchYear}`;
+});
+
+// Pre-save middleware to set batchDisplayName if not provided
+courseSchema.pre('save', function(next) {
+  if (!this.batchDisplayName) {
+    this.batchDisplayName = `Batch ${this.batchNumber} (${this.batchYear})`;
+  }
+  next();
+});
+
+// Static method to find courses by batch year
+courseSchema.statics.findByBatchYear = function(year) {
+  return this.find({ batchYear: year, status: 'active' });
 };
 
-// Static method to find active courses
-courseSchema.statics.findActive = function() {
-  return this.find({ status: 'active' });
+// Static method to find courses by batch number
+courseSchema.statics.findByBatchNumber = function(batchNumber) {
+  return this.find({ batchNumber, status: 'active' });
 };
 
-// Static method to find courses by type
-courseSchema.statics.findByType = function(courseType) {
-  return this.find({ courseType, status: 'active' });
+// Static method to find courses by year and batch
+courseSchema.statics.findByBatch = function(year, batchNumber) {
+  return this.find({ batchYear: year, batchNumber, status: 'active' });
+};
+
+// Static method to get unique batch years
+courseSchema.statics.getBatchYears = async function() {
+  const years = await this.distinct('batchYear', { status: 'active' });
+  return years.sort().reverse();
 };
 
 // Instance method to check if student is enrolled

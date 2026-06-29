@@ -1,4 +1,4 @@
-// src/pages/Students/AddStudent.jsx - COMPLETE
+// src/pages/Students/AddStudent.jsx - COMPLETE WITH REFERRAL AND HISTORICAL RECORD
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -15,12 +15,14 @@ import {
   Mail,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  Users
 } from 'lucide-react';
 import Layout from '../../components/Layout/Layout';
 import { useStudentStore } from '../../stores/studentStore';
 import { useAuthStore } from '../../stores/authStore';
 import { formatStudentForAPI } from '../../utils/studentDataFormatter';
+import ReferralSelector from '../../components/Referral/ReferralSelector';
 import toast from 'react-hot-toast';
 
 const AddStudent = () => {
@@ -56,6 +58,13 @@ const AddStudent = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  // Referral state
+  const [referralData, setReferralData] = useState(null);
+  
+  // Historical record state
+  const [isHistoricalRecord, setIsHistoricalRecord] = useState(false);
+  const [historicalEnrollmentDate, setHistoricalEnrollmentDate] = useState('');
 
   if (user?.role !== 'admin') {
     navigate('/students');
@@ -152,16 +161,33 @@ const AddStudent = () => {
 
     try {
       const { confirmPassword, ...submitData } = formData;
-      const dataToSend = formatStudentForAPI(submitData, true);
+      
+      // Build the data to send
+      const dataToSend = {
+        ...formatStudentForAPI(submitData, true),
+        ...(referralData?.referrerCode && { referralCode: referralData.referrerCode }),
+        ...(isHistoricalRecord && { 
+          isHistoricalRecord: true,
+          historicalEnrollmentDate: historicalEnrollmentDate || null
+        })
+      };
       
       const result = await createStudent(dataToSend);
       
       if (result.success && result.data) {
-        toast.success(
-          `Student ${result.data.user?.name} created successfully! ` +
-          `Student ID: ${result.data.studentId}. ` +
-          `Admission number will be generated when they enroll in a course.`
-        );
+        let successMessage = `Student ${result.data.user?.name} created successfully! Student ID: ${result.data.studentId}.`;
+        
+        if (referralData) {
+          successMessage += ` Referred by: ${referralData.referrerName}.`;
+        }
+        
+        if (isHistoricalRecord) {
+          successMessage += ` Historical record created with enrollment date ${historicalEnrollmentDate || 'Not specified'}.`;
+        } else {
+          successMessage += ` Admission number will be generated when they enroll in a course.`;
+        }
+        
+        toast.success(successMessage);
         navigate(`/students/${result.data._id}`);
       } else {
         toast.error(result.message || 'Failed to create student');
@@ -528,6 +554,74 @@ const AddStudent = () => {
                 </div>
               </div>
             </div>
+
+            {/* Referral Section */}
+            <div className="border-t border-gray-200 pt-4">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <Users className="w-5 h-5 mr-2 text-blue-600" />
+                Referral Information
+              </h2>
+              
+              <div className="grid grid-cols-1 gap-6">
+                <ReferralSelector
+                  value={referralData}
+                  onChange={(data) => setReferralData(data)}
+                  label="Referred By (Optional)"
+                  placeholder="Search for referrer by name or code..."
+                  allowCreate={true}
+                />
+                
+                {referralData && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-blue-700">
+                      Student will be linked to referrer: <strong>{referralData.referrerName}</strong>
+                      {referralData.referrerCode && ` (Code: ${referralData.referrerCode})`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Historical Record Section (Admin only) */}
+            {user?.role === 'admin' && (
+              <div className="border-t border-gray-200 pt-4">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Calendar className="w-5 h-5 mr-2 text-blue-600" />
+                  Historical Record (Optional)
+                </h2>
+                
+                <div className="space-y-4">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={isHistoricalRecord}
+                      onChange={(e) => setIsHistoricalRecord(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">This is a historical student record (past student)</span>
+                  </label>
+                  
+                  {isHistoricalRecord && (
+                    <div>
+                      <label htmlFor="historicalEnrollmentDate" className="block text-sm font-medium text-gray-700 mb-2">
+                        Historical Enrollment Date
+                      </label>
+                      <input
+                        type="date"
+                        id="historicalEnrollmentDate"
+                        name="historicalEnrollmentDate"
+                        value={historicalEnrollmentDate}
+                        onChange={(e) => setHistoricalEnrollmentDate(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Set the original enrollment date for this historical student
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Account Security Section */}
             <div>

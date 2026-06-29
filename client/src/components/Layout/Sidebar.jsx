@@ -1,4 +1,5 @@
-// src/components/Layout/Sidebar.jsx
+// src/components/Layout/Sidebar.jsx - UPDATED WITH ONLINE ENQUIRIES
+
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router";
 import { useAuthStore } from "../../stores/authStore";
@@ -39,8 +40,14 @@ import {
   Calendar,
   UserPlus,
   CalendarDays,
-  BarChart3 as Analytics,
-  ClipboardList
+  ClipboardList,
+  Trophy,
+  UserCircle,
+  Building2,
+  Star,
+  MessageSquare,  // ADDED for Online Enquiries
+  Globe,           // ADDED for Online Enquiries
+  Mail             // ADDED for Online Enquiries
 } from "lucide-react";
 
 const Sidebar = () => {
@@ -54,6 +61,7 @@ const Sidebar = () => {
   const [showExpenseMenu, setShowExpenseMenu] = useState(false);
   const [showReportsMenu, setShowReportsMenu] = useState(false);
   const [showDirectorsMenu, setShowDirectorsMenu] = useState(false);
+  const [showReferralMenu, setShowReferralMenu] = useState(false);
   
   const { unreadCount } = useNotificationStore();
   const { todayCount } = useRequestStore();
@@ -168,7 +176,23 @@ const Sidebar = () => {
     },
   ];
 
-  // 3. ACADEMIC MANAGEMENT - Different for instructors vs admin
+  // 3. ONLINE ENQUIRIES - NEW SECTION (Admin only)
+  const onlineEnquiriesNav = [
+    {
+      name: "Online Enquiries",
+      href: "/enquiries",
+      icon: MessageSquare,
+      roles: ["admin"],
+    },
+    {
+      name: "Enquiry Analytics",
+      href: "/enquiry-analytics",
+      icon: BarChart3,
+      roles: ["admin"],
+    },
+  ];
+
+  // 4. ACADEMIC MANAGEMENT - Different for instructors vs admin
   const academicNavigation = user?.role === "instructor" ? [
     {
       name: "My Students",
@@ -245,7 +269,23 @@ const Sidebar = () => {
     },
   ];
 
-  // 4. FINANCIAL MANAGEMENT - Admin only
+  // 5. REFERRAL MANAGEMENT - Admin only
+  const referralNavigation = [
+    {
+      name: "Referrals",
+      icon: Trophy,
+      roles: ["admin"],
+      isOpen: showReferralMenu,
+      setIsOpen: setShowReferralMenu,
+      isActive: () => isPathStartsWith(['/referrers', '/referral-report']),
+      submenu: [
+        { name: "Manage Referrers", href: "/referrers", icon: Users },
+        { name: "Referral Report", href: "/referral-report", icon: BarChart3 },
+      ],
+    },
+  ];
+
+  // 6. FINANCIAL MANAGEMENT - Admin only
   const financialNavigation = [
     {
       name: "Fee Management",
@@ -307,7 +347,7 @@ const Sidebar = () => {
     },
   ];
 
-  // 5. ADMINISTRATION - Admin only
+  // 7. ADMINISTRATION - Admin only
   const adminNavigation = [
     {
       name: "Directors",
@@ -325,7 +365,7 @@ const Sidebar = () => {
     },
   ];
 
-  // 6. USER & SETTINGS - Everyone
+  // 8. USER & SETTINGS - Everyone
   const userNavigation = [
     {
       name: "Profile",
@@ -338,7 +378,9 @@ const Sidebar = () => {
   // Filter navigation based on user role
   const filteredDashboardNav = dashboardNav.filter(item => item.roles.includes(user?.role));
   const filteredVisitorRequestsNav = visitorRequestsNav.filter(item => item.roles.includes(user?.role));
+  const filteredOnlineEnquiriesNav = onlineEnquiriesNav.filter(item => item.roles.includes(user?.role));
   const filteredAcademicNav = academicNavigation.filter(item => item.roles.includes(user?.role));
+  const filteredReferralNav = referralNavigation.filter(item => item.roles.includes(user?.role));
   const filteredFinancialNav = financialNavigation.filter(item => item.roles.includes(user?.role));
   const filteredAdminNav = adminNavigation.filter(item => item.roles.includes(user?.role));
   const filteredUserNav = userNavigation.filter(item => item.roles.includes(user?.role));
@@ -378,11 +420,12 @@ const Sidebar = () => {
   };
 
   // Section Header Component
-  const SectionHeader = ({ title }) => (
+  const SectionHeader = ({ title, icon: Icon }) => (
     <div className="pt-4 pb-2">
       <div className="px-3 py-2">
         <div className="flex items-center space-x-2">
           <div className="h-px flex-1 bg-gray-200"></div>
+          {Icon && <Icon className="w-3 h-3 text-gray-400" />}
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
             {title}
           </span>
@@ -490,34 +533,50 @@ const Sidebar = () => {
           {/* 2. VISITOR REQUESTS */}
           {filteredVisitorRequestsNav.map(renderMenuItem)}
 
-          {/* 3. ACADEMIC MANAGEMENT */}
+          {/* 3. ONLINE ENQUIRIES - NEW */}
+          {filteredOnlineEnquiriesNav.length > 0 && (
+            <>
+              <SectionHeader title="Enquiries" icon={MessageSquare} />
+              {filteredOnlineEnquiriesNav.map(renderMenuItem)}
+            </>
+          )}
+
+          {/* 4. ACADEMIC MANAGEMENT */}
           {filteredAcademicNav.length > 0 && (
             <>
-              <SectionHeader title="Academic Management" />
+              <SectionHeader title="Academic Management" icon={BookOpen} />
               {filteredAcademicNav.map(renderMenuItem)}
             </>
           )}
 
-          {/* 4. FINANCIAL MANAGEMENT */}
+          {/* 5. REFERRAL MANAGEMENT */}
+          {filteredReferralNav.length > 0 && (
+            <>
+              <SectionHeader title="Referral Management" icon={Trophy} />
+              {filteredReferralNav.map(renderMenuItem)}
+            </>
+          )}
+
+          {/* 6. FINANCIAL MANAGEMENT */}
           {filteredFinancialNav.length > 0 && user?.role !== 'instructor' && (
             <>
-              <SectionHeader title="Financial Management" />
+              <SectionHeader title="Financial Management" icon={DollarSign} />
               {filteredFinancialNav.map(renderMenuItem)}
             </>
           )}
 
-          {/* 5. ADMINISTRATION */}
+          {/* 7. ADMINISTRATION */}
           {filteredAdminNav.length > 0 && user?.role !== 'instructor' && (
             <>
-              <SectionHeader title="Administration" />
+              <SectionHeader title="Administration" icon={Settings} />
               {filteredAdminNav.map(renderMenuItem)}
             </>
           )}
 
-          {/* 6. USER SECTION */}
+          {/* 8. USER SECTION */}
           {filteredUserNav.length > 0 && (
             <>
-              <SectionHeader title="User" />
+              <SectionHeader title="User" icon={User} />
               {filteredUserNav.map(renderMenuItem)}
             </>
           )}
@@ -572,7 +631,7 @@ const Sidebar = () => {
           {showUserMenu && (
             <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 animate-fadeIn">
               <Link to="/profile" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors" onClick={() => setShowUserMenu(false)}>
-                <User className="w-4 h-4 mr-2" /> My Profile
+                <UserCircle className="w-4 h-4 mr-2" /> My Profile
               </Link>
               <Link to="/settings" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors" onClick={() => setShowUserMenu(false)}>
                 <Settings className="w-4 h-4 mr-2" /> Settings

@@ -1,13 +1,12 @@
-// src/services/paymentAPI.js
+// src/services/paymentAPI.js - WITH DEBUG LOGGING
+
 import api from './api';
 
 export const paymentAPI = {
-  // Record a new payment
   recordPayment: (paymentData) => {
     return api.post('/payments', paymentData);
   },
   
-  // Get all payments with filters
   getPayments: (params = {}) => {
     const { 
       page = 1, 
@@ -38,33 +37,37 @@ export const paymentAPI = {
     });
   },
   
-  // Get single payment
   getPayment: (id) => {
     return api.get(`/payments/${id}`);
   },
   
-  // Update payment
   updatePayment: (id, data) => {
     return api.put(`/payments/${id}`, data);
   },
   
-  // Delete payment
   deletePayment: (id) => {
     return api.delete(`/payments/${id}`);
   },
   
-  // Get student fee summary
   getStudentFeeSummary: (studentId) => {
     return api.get(`/payments/student/${studentId}/summary`);
   },
   
-  // Get payment statistics
-  getPaymentStats: (params = {}) => {
+  // FIXED: Get payment statistics with debug logging
+  getPaymentStats: async (params = {}) => {
     const { startDate, endDate } = params;
-    return api.get('/payments/stats', { params: { startDate, endDate } });
+    console.log('📊 Fetching payment stats with params:', { startDate, endDate });
+    
+    try {
+      const response = await api.get('/payments/stats', { params: { startDate, endDate } });
+      console.log('✅ Payment stats response:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ Payment stats error:', error.response?.data || error.message);
+      throw error;
+    }
   },
   
-  // Export payments
   exportPayments: (params = {}) => {
     const { startDate, endDate, paymentMethod, courseId, format = 'csv' } = params;
     return api.get('/payments/export', { 
@@ -73,7 +76,6 @@ export const paymentAPI = {
     });
   },
 
-  // Get all students fee status (admin view)
   getAllStudentsFeeStatus: (params = {}) => {
     const { status, courseId, search } = params;
     return api.get('/students/fees/overview', {
@@ -81,15 +83,23 @@ export const paymentAPI = {
     });
   },
 
-  // Get outstanding fees report - FIXED: Using correct path
-  getOutstandingReport: (params = {}) => {
+  // FIXED: Get outstanding report with debug logging
+  getOutstandingReport: async (params = {}) => {
     const { minBalance = 0, courseId } = params;
-    return api.get('/reports/outstanding', {  // This path is correct: /api/reports/outstanding
-      params: { minBalance, courseId }
-    });
+    console.log('📊 Fetching outstanding report with params:', { minBalance, courseId });
+    
+    try {
+      const response = await api.get('/reports/outstanding', {
+        params: { minBalance, courseId }
+      });
+      console.log('✅ Outstanding report response:', response.data);
+      return response;
+    } catch (error) {
+      console.error('❌ Outstanding report error:', error.response?.data || error.message);
+      throw error;
+    }
   },
 
-  // Get collection report
   getCollectionReport: (params = {}) => {
     const { startDate, endDate, groupBy = 'day' } = params;
     return api.get('/reports/collections', {
@@ -97,12 +107,10 @@ export const paymentAPI = {
     });
   },
 
-  // Get course payment summary
   getCoursePaymentSummary: (courseId) => {
     return api.get(`/courses/${courseId}/payments/summary`);
   },
 
-  // Get course students payment status
   getCourseStudentsPaymentStatus: (courseId, params = {}) => {
     const { status, search } = params;
     return api.get(`/courses/${courseId}/payments/students`, {
@@ -110,7 +118,6 @@ export const paymentAPI = {
     });
   },
 
-  // Export course payment report
   exportCoursePaymentReport: (courseId, params = {}) => {
     const { status, search, format = 'csv' } = params;
     return api.get(`/courses/${courseId}/payments/export`, {

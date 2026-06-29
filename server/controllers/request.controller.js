@@ -1,8 +1,12 @@
-// controllers/requestController.js - WITH NOTIFICATION INTEGRATION
+// controllers/request.controller.js - COMPLETE UPDATED VERSION
+
 import Request from '../models/request.model.js';
 import User from '../models/user.model.js';
+import Analytics from '../models/analytics.model.js';
 import { errorHandler } from '../utils/error.js';
-import NotificationService from '../services/notificationService.js'; // ADD THIS IMPORT
+import NotificationService from '../services/notificationService.js';
+
+// ============ EXISTING FUNCTIONS (Unchanged) ============
 
 // @desc    Create new visitor request (receptionist only)
 // @route   POST /api/requests
@@ -26,7 +30,7 @@ export const createRequest = async (req, res, next) => {
       message: `New visitor request from ${request.visitorName || 'a visitor'} (${request.purpose || 'General'})`,
       type: 'request',
       actionUrl: `/requests/${request._id}`
-    }).catch(err => console.error('Notification error:', err)); // Optional error handling
+    }).catch(err => console.error('Notification error:', err));
 
     res.status(201).json({
       success: true,
@@ -41,7 +45,7 @@ export const createRequest = async (req, res, next) => {
 // @route   GET /api/requests
 export const getAllRequests = async (req, res, next) => {
   try {
-    const { status, department, priority, startDate, endDate, assignedTo } = req.query;
+    const { status, department, priority, startDate, endDate, assignedTo, type } = req.query;
     
     let filter = {};
     
@@ -57,11 +61,16 @@ export const getAllRequests = async (req, res, next) => {
     // Filter by assigned staff
     if (assignedTo) filter.assignedTo = assignedTo;
     
+    // Filter by type (online vs physical)
+    if (type === 'online') filter.isOnlineEnquiry = true;
+    else if (type === 'physical') filter.isOnlineEnquiry = { $ne: true };
+    
     // Filter by date range
     if (startDate || endDate) {
-      filter.createdAt = {};
-      if (startDate) filter.createdAt.$gte = new Date(startDate);
-      if (endDate) filter.createdAt.$lte = new Date(endDate);
+      const dateField = filter.isOnlineEnquiry ? 'submittedAt' : 'createdAt';
+      filter[dateField] = {};
+      if (startDate) filter[dateField].$gte = new Date(startDate);
+      if (endDate) filter[dateField].$lte = new Date(endDate);
     }
     
     // If user is receptionist (not admin), only show their requests
@@ -72,6 +81,7 @@ export const getAllRequests = async (req, res, next) => {
     const requests = await Request.find(filter)
       .populate('receptionist', 'name email')
       .populate('assignedTo', 'name email role')
+      .populate('courseOfInterest', 'courseCode name')
       .sort('-createdAt')
       .lean();
 
@@ -92,13 +102,14 @@ export const getRequest = async (req, res, next) => {
     const request = await Request.findById(req.params.id)
       .populate('receptionist', 'name email')
       .populate('assignedTo', 'name email role')
-      .populate('notes.addedBy', 'name role');
+      .populate('notes.addedBy', 'name role')
+      .populate('courseOfInterest', 'courseCode name');
 
     if (!request) {
       return next(errorHandler(404, 'Request not found'));
     }
 
-    // Check permissions using your auth logic
+    // Check permissions
     const userId = req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
     const isReceptionistOwner = request.receptionist._id.toString() === userId;
@@ -117,7 +128,7 @@ export const getRequest = async (req, res, next) => {
   }
 };
 
-// @desc    Update request status/assignment (admin/receptionist/assigned staff)
+// @desc    Update request status/assignment
 // @route   PUT /api/requests/:id
 export const updateRequest = async (req, res, next) => {
   try {
@@ -145,37 +156,29 @@ export const updateRequest = async (req, res, next) => {
     const updatableFields = [];
     
     if (isAdmin) {
-      // Admin can update everything
       updatableFields.push('status', 'priority', 'department', 'assignedTo', 'notes', 
                           'description', 'scheduledDate', 'resolvedDate', 'visitorName',
                           'visitorEmail', 'visitorPhone', 'purpose');
     } else if (isReceptionistOwner) {
-      // Receptionist can update basic info for their own requests
       updatableFields.push('description', 'priority', 'department', 'notes');
     } else if (isAssignedStaff) {
-      // Assigned staff can update status and add notes
       updatableFields.push('status', 'notes');
     }
     
     // Apply updates
     updatableFields.forEach(field => {
       if (req.body[field] !== undefined) {
-        // Handle notes array specially
         if (field === 'notes' && Array.isArray(req.body.notes)) {
           request.notes = req.body.notes;
-        } 
-        // Handle single note addition
-        else if (field === 'notes' && typeof req.body.notes === 'object') {
+        } else if (field === 'notes' && typeof req.body.notes === 'object') {
           request.notes.push({
             ...req.body.notes,
             addedBy: req.user._id
           });
-        }
-        else {
+        } else {
           request[field] = req.body[field];
         }
         
-        // Track status change
         if (field === 'status') {
           newStatus = req.body[field];
         }
@@ -193,11 +196,11 @@ export const updateRequest = async (req, res, next) => {
     const populatedRequest = await Request.findById(request._id)
       .populate('receptionist', 'name email')
       .populate('assignedTo', 'name email role')
-      .populate('notes.addedBy', 'name role');
+      .populate('notes.addedBy', 'name role')
+      .populate('courseOfInterest', 'courseCode name');
 
-    // NOTIFICATION: Status changed - Notify relevant parties
+    // NOTIFICATION: Status changed
     if (newStatus !== oldStatus) {
-      // Determine recipients (excluding the updater)
       const recipientIds = [];
       
       if (populatedRequest.receptionist && populatedRequest.receptionist._id) {
@@ -208,14 +211,13 @@ export const updateRequest = async (req, res, next) => {
         recipientIds.push(populatedRequest.assignedTo._id);
       }
       
-      // Remove updater from recipients
       const filteredRecipients = recipientIds.filter(
         id => id.toString() !== req.user._id.toString()
       );
       
       if (filteredRecipients.length > 0) {
         NotificationService.createForMultiple(
-          filteredRecipients.map(r => r._id),
+          filteredRecipients.map(r => r._id ? r._id : r),
           {
             title: 'Request Status Updated',
             message: `Request #${populatedRequest._id} status changed from ${oldStatus} to ${newStatus}`,
@@ -225,7 +227,6 @@ export const updateRequest = async (req, res, next) => {
         ).catch(err => console.error('Notification error:', err));
       }
       
-      // NOTIFICATION: Request completed - Notify admins and creator
       if (newStatus === 'completed') {
         const completedRecipients = [];
         
@@ -233,7 +234,6 @@ export const updateRequest = async (req, res, next) => {
           completedRecipients.push(populatedRequest.receptionist._id);
         }
         
-        // Get admin IDs (excluding updater if admin)
         const admins = await User.find({ role: 'admin', isActive: true }).select('_id');
         admins.forEach(admin => {
           if (admin._id.toString() !== req.user._id.toString()) {
@@ -268,7 +268,6 @@ export const updateRequest = async (req, res, next) => {
 // @route   DELETE /api/requests/:id
 export const deleteRequest = async (req, res, next) => {
   try {
-    // Only admin can delete requests
     if (req.user.role !== 'admin') {
       return next(errorHandler(403, 'Only admin can delete requests'));
     }
@@ -306,7 +305,6 @@ export const addNote = async (req, res, next) => {
       return next(errorHandler(404, 'Request not found'));
     }
 
-    // Check permissions
     const userId = req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
     const isReceptionistOwner = request.receptionist.toString() === userId;
@@ -323,37 +321,31 @@ export const addNote = async (req, res, next) => {
 
     await request.save();
 
-    // Populate the new note
     const populatedRequest = await Request.findById(request._id)
       .populate('receptionist', 'name email')
       .populate('assignedTo', 'name email role')
-      .populate('notes.addedBy', 'name role');
+      .populate('notes.addedBy', 'name role')
+      .populate('courseOfInterest', 'courseCode name');
 
     const newNote = populatedRequest.notes[populatedRequest.notes.length - 1];
 
-    // NOTIFICATION: Note added - Notify all other involved parties
     const recipientIds = [];
     
-    // Receptionist (creator)
     if (populatedRequest.receptionist && populatedRequest.receptionist._id) {
       recipientIds.push(populatedRequest.receptionist._id);
     }
     
-    // Assigned staff
     if (populatedRequest.assignedTo && populatedRequest.assignedTo._id) {
       recipientIds.push(populatedRequest.assignedTo._id);
     }
     
-    // Get admins
     const admins = await User.find({ role: 'admin', isActive: true }).select('_id');
     admins.forEach(admin => recipientIds.push(admin._id));
     
-    // Remove note author from recipients
     const filteredRecipients = recipientIds.filter(
       id => id.toString() !== req.user._id.toString()
     );
     
-    // Remove duplicates
     const uniqueRecipients = [...new Set(filteredRecipients.map(id => id.toString()))]
       .map(id => filteredRecipients.find(r => r.toString() === id));
     
@@ -388,7 +380,6 @@ export const getRequestStats = async (req, res, next) => {
   try {
     let filter = {};
     
-    // If receptionist (not admin), only show their stats
     if (req.user.role === 'receptionist') {
       filter.receptionist = req.user._id;
     }
@@ -405,7 +396,6 @@ export const getRequestStats = async (req, res, next) => {
 
     const total = await Request.countDocuments(filter);
     
-    // Today's requests
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -414,7 +404,6 @@ export const getRequestStats = async (req, res, next) => {
       createdAt: { $gte: today }
     });
 
-    // Pending requests count
     const pendingRequests = stats.find(stat => stat._id === 'pending')?.count || 0;
 
     res.json({
@@ -440,7 +429,7 @@ export const getStaffMembers = async (req, res, next) => {
     }
 
     const staff = await User.find({
-      role: { $in: ['admin', 'teacher', 'receptionist'] },
+      role: { $in: ['admin', 'instructor', 'receptionist'] },
       isActive: true
     }).select('name email role');
 
@@ -473,7 +462,6 @@ export const assignRequest = async (req, res, next) => {
       return next(errorHandler(404, 'Request not found'));
     }
 
-    // Verify staff member exists
     const staffMember = await User.findById(assignedTo);
     if (!staffMember) {
       return next(errorHandler(404, 'Staff member not found'));
@@ -483,7 +471,6 @@ export const assignRequest = async (req, res, next) => {
     request.assignedTo = assignedTo;
     request.status = 'in-progress';
     
-    // Add note about assignment
     request.notes.push({
       content: `Assigned to ${staffMember.name} (${staffMember.role})`,
       addedBy: req.user._id
@@ -494,9 +481,9 @@ export const assignRequest = async (req, res, next) => {
     const populatedRequest = await Request.findById(request._id)
       .populate('receptionist', 'name email')
       .populate('assignedTo', 'name email role')
-      .populate('notes.addedBy', 'name role');
+      .populate('notes.addedBy', 'name role')
+      .populate('courseOfInterest', 'courseCode name');
 
-    // NOTIFICATION: Request assigned - Notify the assigned staff
     if (oldAssignedTo?.toString() !== assignedTo.toString()) {
       NotificationService.createNotification({
         recipientId: assignedTo,
@@ -516,21 +503,16 @@ export const assignRequest = async (req, res, next) => {
   }
 };
 
-// controllers/requestController.js - ADD THIS FUNCTION AT THE BOTTOM (BEFORE EXPORTS)
 // @desc    Get today's request count for current user
 // @route   GET /api/requests/today-count
-// @access  Private
 export const getTodayRequestCount = async (req, res, next) => {
   try {
-    // Get today's date at midnight (00:00:00)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // Get tomorrow's date at midnight
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    // Base filter for today's requests
     let filter = {
       createdAt: {
         $gte: today,
@@ -538,14 +520,11 @@ export const getTodayRequestCount = async (req, res, next) => {
       }
     };
     
-    // Role-specific filtering
     if (req.user.role === 'receptionist') {
-      // Receptionist: Only count requests they created
       filter.receptionist = req.user._id;
     } else if (req.user.role === 'admin') {
-      // Admin: Count all requests (no additional filter needed)
+      // Admin sees all
     } else {
-      // Other roles (teacher, student, parent): No access to requests
       return res.json({
         success: true,
         data: { count: 0 }
@@ -563,15 +542,239 @@ export const getTodayRequestCount = async (req, res, next) => {
   }
 };
 
-// Export all functions
-// export {
-//   createRequest,
-//   getAllRequests,
-//   getRequest,
-//   updateRequest,
-//   deleteRequest,
-//   addNote,
-//   getRequestStats,
-//   getStaffMembers,
-//   assignRequest
-// };
+// ============ NEW: ONLINE ENQUIRY SUBMISSION (Public) ============
+
+// @desc    Submit online enquiry (public - no authentication)
+// @route   POST /api/requests/enquiry
+// @access  Public
+export const submitEnquiry = async (req, res, next) => {
+  try {
+    const {
+      // Personal Information
+      visitorName,
+      visitorEmail,
+      visitorPhone,
+      
+      // Enquiry Details
+      enquiryType,
+      message,
+      courseOfInterest,
+      courseOfInterestNames,
+      preferredContactMethod,
+      bestTimeToContact,
+      
+      // Source Tracking (captured from frontend)
+      source,
+      sourceOther,
+      sourceUrl,
+      referrer,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmTerm,
+      utmContent,
+      
+      // Device Info
+      visitorId,
+      sessionId,
+      device,
+      browser,
+      os,
+      ipAddress
+    } = req.body;
+
+    // ============ VALIDATION ============
+    if (!visitorName || visitorName.trim() === '') {
+      return next(errorHandler(400, 'Full name is required'));
+    }
+
+    if (!visitorEmail || !visitorEmail.match(/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/)) {
+      return next(errorHandler(400, 'Valid email address is required'));
+    }
+
+    if (!visitorPhone || visitorPhone.trim() === '') {
+      return next(errorHandler(400, 'Phone number is required'));
+    }
+
+    if (!message || message.trim() === '') {
+      return next(errorHandler(400, 'Message is required'));
+    }
+
+    // ============ FIND OR CREATE RECEPTIONIST ============
+    // Find the first admin to assign as receptionist
+    let receptionist = await User.findOne({ role: 'admin', isActive: true });
+    
+    if (!receptionist) {
+      // Fallback: find any active user
+      receptionist = await User.findOne({ isActive: true });
+    }
+    
+    if (!receptionist) {
+      return next(errorHandler(500, 'No receptionist available to handle enquiries'));
+    }
+
+    // ============ CREATE ENQUIRY ============
+    const enquiryData = {
+      // Personal Info
+      visitorName: visitorName.trim(),
+      visitorEmail: visitorEmail.toLowerCase().trim(),
+      visitorPhone: visitorPhone.trim(),
+      
+      // Enquiry Details
+      description: message.trim(),
+      purpose: enquiryType === 'admission_inquiry' ? 'Admission Inquiry' : 
+               enquiryType === 'fee_inquiry' ? 'Fee Payment' : 'Other',
+      enquiryType: enquiryType || 'general_inquiry',
+      message: message.trim(),
+      courseOfInterest: courseOfInterest || [],
+      courseOfInterestNames: courseOfInterestNames || [],
+      preferredContactMethod: preferredContactMethod || 'email',
+      bestTimeToContact: bestTimeToContact || 'anytime',
+      
+      // Metadata
+      isOnlineEnquiry: true,
+      status: 'pending',
+      priority: 'medium',
+      receptionist: receptionist._id,
+      submittedAt: new Date(),
+      
+      // Source Tracking
+      source: source || 'direct',
+      sourceOther: source === 'other' ? sourceOther : undefined,
+      sourceUrl: sourceUrl || null,
+      referrer: referrer || req.headers.referer || null,
+      utmSource: utmSource || null,
+      utmMedium: utmMedium || null,
+      utmCampaign: utmCampaign || null,
+      utmTerm: utmTerm || null,
+      utmContent: utmContent || null,
+      
+      // Device Info
+      ipAddress: ipAddress || req.ip || req.headers['x-forwarded-for'] || null,
+      userAgent: req.headers['user-agent'] || null,
+    };
+
+    const enquiry = await Request.create(enquiryData);
+
+    // ============ UPDATE ANALYTICS ============
+    // Mark analytics records as converted
+    if (visitorId) {
+      await Analytics.updateMany(
+        { visitorId: visitorId },
+        { 
+          $set: { 
+            converted: true, 
+            convertedAt: new Date(),
+            requestId: enquiry._id
+          } 
+        }
+      );
+    }
+
+    // ============ SEND NOTIFICATIONS ============
+    // Notify all admins about the new enquiry
+    const admins = await User.find({ role: 'admin', isActive: true }).select('_id');
+    
+    if (admins.length > 0) {
+      const adminIds = admins.map(a => a._id);
+      
+      // Get source display name
+      const sourceMap = {
+        google: 'Google Search',
+        facebook: 'Facebook',
+        instagram: 'Instagram',
+        linkedin: 'LinkedIn',
+        tiktok: 'TikTok',
+        twitter: 'Twitter/X',
+        referral: 'Referral',
+        direct: 'Direct Visit',
+        advertisement: 'Advertisement',
+        other: 'Other'
+      };
+      const sourceDisplay = sourceMap[source] || source || 'Unknown';
+      
+      NotificationService.createForMultiple(
+        adminIds,
+        {
+          title: '📝 New Online Enquiry',
+          message: `New enquiry from ${visitorName} (${visitorEmail}) via ${sourceDisplay}`,
+          type: 'request',
+          actionUrl: `/requests/${enquiry._id}`
+        }
+      ).catch(err => console.error('Notification error:', err));
+    }
+
+    // ============ RESPONSE ============
+    const populatedEnquiry = await Request.findById(enquiry._id)
+      .populate('courseOfInterest', 'courseCode name')
+      .populate('receptionist', 'name email');
+
+    res.status(201).json({
+      success: true,
+      message: 'Enquiry submitted successfully! We will contact you shortly.',
+      data: {
+        id: enquiry._id,
+        visitorName: enquiry.visitorName,
+        visitorEmail: enquiry.visitorEmail,
+        visitorPhone: enquiry.visitorPhone,
+        enquiryType: enquiry.enquiryTypeDisplay,
+        submittedAt: enquiry.submittedAt,
+        source: enquiry.sourceDisplay
+      }
+    });
+
+  } catch (error) {
+    console.error('Submit enquiry error:', error);
+    next(errorHandler(500, error.message));
+  }
+};
+
+// @desc    Convert online enquiry to physical visit request
+// @route   POST /api/requests/:id/convert-to-visit
+// @access  Private (Admin/Receptionist)
+export const convertEnquiryToVisit = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    
+    // Check permissions
+    if (req.user.role !== 'admin' && req.user.role !== 'receptionist') {
+      return next(errorHandler(403, 'Not authorized to convert enquiries'));
+    }
+
+    const enquiry = await Request.findById(id);
+    
+    if (!enquiry) {
+      return next(errorHandler(404, 'Enquiry not found'));
+    }
+    
+    if (!enquiry.isOnlineEnquiry) {
+      return next(errorHandler(400, 'This is not an online enquiry'));
+    }
+    
+    if (enquiry.convertedToVisit) {
+      return next(errorHandler(400, 'This enquiry has already been converted to a visit'));
+    }
+
+    // Mark as converted
+    enquiry.convertedToVisit = true;
+    enquiry.convertedAt = new Date();
+    enquiry.status = 'in-progress';
+    await enquiry.save();
+
+    // Get the populated enquiry
+    const populatedEnquiry = await Request.findById(id)
+      .populate('receptionist', 'name email')
+      .populate('assignedTo', 'name email role')
+      .populate('courseOfInterest', 'courseCode name');
+
+    res.json({
+      success: true,
+      message: 'Enquiry converted to visit successfully',
+      data: populatedEnquiry
+    });
+
+  } catch (error) {
+    console.error('Convert enquiry error:', error);
+    next(errorHandler(500, error.message));
+  }
+};
