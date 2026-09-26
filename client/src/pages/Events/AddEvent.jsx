@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Save, X, Calendar as CalendarIcon } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
 import { formatDateForInput } from '../../utils/calendarUtils';
@@ -113,7 +112,7 @@ const AddEvent = () => {
   };
   
   return (
-    <Layout>
+    <>
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -401,7 +400,7 @@ const AddEvent = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

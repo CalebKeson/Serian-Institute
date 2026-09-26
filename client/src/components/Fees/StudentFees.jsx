@@ -26,7 +26,6 @@ import {
   BookOpen,
   UserCheck
 } from 'lucide-react';
-import Layout from '../Layout/Layout';
 import { usePaymentStore } from '../../stores/paymentStore';
 import { useStudentStore } from '../../stores/studentStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -353,11 +352,11 @@ const StudentFees = () => {
 
   if (studentLoading || !currentStudent) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
         </div>
-      </Layout>
+      </>
     );
   }
 
@@ -369,7 +368,7 @@ const StudentFees = () => {
   );
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -705,7 +704,7 @@ const StudentFees = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

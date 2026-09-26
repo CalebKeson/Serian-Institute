@@ -1,75 +1,123 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useEnquiryStore } from '../../stores/enquiryStore';
-import { Globe, Mail, Users, TrendingUp, MessageSquare, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { requestAPI } from '../../services/requestAPI';
+import { Globe, Users, TrendingUp, MessageSquare, Clock, User } from 'lucide-react';
 import { Link } from 'react-router';
 
 const RequestStats = ({ stats, loading }) => {
   const { 
     sourceBreakdown, 
     fetchSourceBreakdown,
-    stats: enquiryStats,
-    fetchStats: fetchEnquiryStats,
     loading: enquiryLoading
   } = useEnquiryStore();
 
+  const [physicalCount, setPhysicalCount] = useState(0);
+  const [onlineCount, setOnlineCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [todayCount, setTodayCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
-    // Fetch online enquiry stats when component mounts
-    fetchEnquiryStats();
+    // Fetch source breakdown for analytics
     fetchSourceBreakdown();
+    
+    // Fetch counts by type
+    fetchTypeCounts();
   }, []);
 
-  // Physical visit stats
-  const physicalStats = {
-    total: stats?.total || 0,
-    today: stats?.today || 0,
-    pending: stats?.pending || 0,
-    completed: stats?.stats?.find(s => s._id === 'completed')?.count || 0
+  const fetchTypeCounts = async () => {
+    setIsLoading(true);
+    try {
+      // Get today's date
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Fetch physical requests (type: 'physical')
+      const physicalResponse = await requestAPI.getAllRequests({ 
+        type: 'physical', 
+        limit: 1000 
+      });
+      const physicalRequests = physicalResponse.data?.data || [];
+      console.log('📊 Physical requests:', physicalRequests.length);
+      
+      // Fetch online requests (type: 'online')
+      const onlineResponse = await requestAPI.getAllRequests({ 
+        type: 'online', 
+        limit: 1000 
+      });
+      const onlineRequests = onlineResponse.data?.data || [];
+      console.log('📊 Online requests:', onlineRequests.length);
+      
+      // Set counts
+      setPhysicalCount(physicalRequests.length);
+      setOnlineCount(onlineRequests.length);
+      
+      // Count today's requests (both physical and online)
+      const todayPhysical = physicalRequests.filter(r => 
+        r.createdAt?.split('T')[0] === today
+      ).length;
+      const todayOnline = onlineRequests.filter(r => 
+        r.createdAt?.split('T')[0] === today
+      ).length;
+      setTodayCount(todayPhysical + todayOnline);
+      
+      // Count pending requests (both physical and online)
+      const pendingPhysical = physicalRequests.filter(r => r.status === 'pending').length;
+      const pendingOnline = onlineRequests.filter(r => r.status === 'pending').length;
+      setPendingCount(pendingPhysical + pendingOnline);
+      
+      console.log('📊 Stats calculated:', {
+        physical: physicalRequests.length,
+        online: onlineRequests.length,
+        today: todayPhysical + todayOnline,
+        pending: pendingPhysical + pendingOnline
+      });
+      
+    } catch (error) {
+      console.error('Error fetching type counts:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Online enquiry stats
-  const onlineStats = {
-    total: enquiryStats?.total || 0,
-    today: enquiryStats?.today || 0,
-    pending: enquiryStats?.pending || 0,
-    converted: enquiryStats?.converted || 0
-  };
+  // Use the stats from the Request API for total
+  const totalRequests = stats?.total || 0;
 
   const statCards = [
     {
-      title: 'Total Physical Requests',
-      value: physicalStats.total,
+      title: 'Total Requests',
+      value: totalRequests,
       icon: Users,
       color: 'blue',
+      description: 'Physical + Online combined'
+    },
+    {
+      title: "Today's Requests",
+      value: todayCount,
+      icon: Clock,
+      color: 'green',
+      description: 'Both physical and online'
+    },
+    {
+      title: 'Total Physical Requests',
+      value: physicalCount,
+      icon: User,
+      color: 'indigo',
       description: 'All physical visitor requests'
     },
     {
-      title: "Today's Visitors",
-      value: physicalStats.today,
-      icon: Clock,
-      color: 'green',
-      description: 'Physical visitors today'
-    },
-    {
       title: 'Total Online Enquiries',
-      value: onlineStats.total,
+      value: onlineCount,
       icon: Globe,
       color: 'purple',
       description: 'All online enquiries'
     },
     {
       title: 'Pending Enquiries',
-      value: onlineStats.pending,
+      value: pendingCount,
       icon: MessageSquare,
       color: 'yellow',
-      description: 'Online enquiries awaiting response'
-    },
-    {
-      title: 'Converted to Visit',
-      value: onlineStats.converted,
-      icon: CheckCircle,
-      color: 'green',
-      description: 'Online enquiries converted to physical visits'
+      description: 'Awaiting action'
     }
   ];
 
@@ -79,13 +127,14 @@ const RequestStats = ({ stats, loading }) => {
     yellow: 'bg-yellow-50 text-yellow-600',
     purple: 'bg-purple-50 text-purple-600',
     orange: 'bg-orange-50 text-orange-600',
-    red: 'bg-red-50 text-red-600'
+    red: 'bg-red-50 text-red-600',
+    indigo: 'bg-indigo-50 text-indigo-600'
   };
 
   // Source breakdown for display
   const topSources = sourceBreakdown?.sources?.slice(0, 5) || [];
 
-  if (loading || enquiryLoading) {
+  if (loading || enquiryLoading || isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         {[...Array(5)].map((_, i) => (

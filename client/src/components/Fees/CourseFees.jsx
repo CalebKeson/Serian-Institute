@@ -26,7 +26,6 @@ import {
   Loader,
   Hash
 } from 'lucide-react';
-import Layout from '../Layout/Layout';
 import { usePaymentStore } from '../../stores/paymentStore';
 import { useCourseStore } from '../../stores/courseStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -279,16 +278,16 @@ const CourseFees = () => {
 
   if (courseLoading || !currentCourse) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -768,7 +767,7 @@ const CourseFees = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

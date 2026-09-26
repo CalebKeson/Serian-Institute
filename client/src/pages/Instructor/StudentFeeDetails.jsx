@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, DollarSign, Calendar, CreditCard, User, Mail, Phone } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { formatCurrency } from '../../utils/feeFormatter';
 import toast from 'react-hot-toast';
 
@@ -101,16 +100,16 @@ const StudentFeeDetails = () => {
   
   if (loading) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
-      </Layout>
+      </>
     );
   }
   
   return (
-    <Layout>
+    <>
       <div className="p-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -327,7 +326,7 @@ const StudentFeeDetails = () => {
           </p>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

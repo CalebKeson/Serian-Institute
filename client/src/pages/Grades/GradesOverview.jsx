@@ -13,7 +13,6 @@ import {
   TrendingUp,
   BarChart3
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useGradeStore } from '../../stores/gradeStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useCourseStore } from '../../stores/courseStore';
@@ -69,7 +68,7 @@ const GradesOverview = () => {
   );
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -167,7 +166,7 @@ const GradesOverview = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

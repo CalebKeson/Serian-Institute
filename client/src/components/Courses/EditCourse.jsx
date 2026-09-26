@@ -28,7 +28,6 @@ import {
   FileText,
   HeartPulse
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useCourseStore } from '../../stores/courseStore';
 import { useInstructorStore } from '../../stores/instructorStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -294,17 +293,17 @@ const EditCourse = () => {
 
   if (loading && !currentCourse) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-purple-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentCourse && !loading) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Course not found</h3>
@@ -316,14 +315,14 @@ const EditCourse = () => {
             Back to Courses
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
   const enrolledCount = currentCourse.enrolledStudents?.length || 0;
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -987,7 +986,7 @@ const EditCourse = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

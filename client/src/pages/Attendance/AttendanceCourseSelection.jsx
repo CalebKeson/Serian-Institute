@@ -17,7 +17,6 @@ import {
   ChevronRight,
   Loader
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useCourseStore } from '../../stores/courseStore';
 import { useAuthStore } from '../../stores/authStore';
 import toast from 'react-hot-toast';
@@ -95,7 +94,7 @@ const AttendanceCourseSelection = () => {
   ];
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -345,7 +344,7 @@ const AttendanceCourseSelection = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

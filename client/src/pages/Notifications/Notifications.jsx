@@ -1,6 +1,5 @@
 // pages/Notifications/Notifications.jsx - UPDATED WITH ALL NOTIFICATION TYPES
 import React, { useState, useEffect } from 'react';
-import Layout from '../../components/Layout/Layout';
 import { useNotificationStore } from '../../stores/notificationStore';
 import toast from 'react-hot-toast';
 
@@ -190,7 +189,7 @@ const Notifications = () => {
   };
   
   return (
-    <Layout>
+    <>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -512,7 +511,7 @@ const Notifications = () => {
           )}
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

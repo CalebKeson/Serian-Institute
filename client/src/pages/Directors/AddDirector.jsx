@@ -14,7 +14,6 @@ import {
   CheckCircle,
   Users
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useDirectorStore } from '../../stores/directorStore';
 import { useAuthStore } from '../../stores/authStore';
 import toast from 'react-hot-toast';
@@ -156,7 +155,7 @@ const AddDirector = () => {
   ];
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -485,7 +484,7 @@ const AddDirector = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

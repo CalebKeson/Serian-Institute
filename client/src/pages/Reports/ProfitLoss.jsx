@@ -15,7 +15,6 @@ import {
   Loader,
   ArrowLeft
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useFinancialStore } from '../../stores/financialStore';
 import { useAuthStore } from '../../stores/authStore';
 import PLStatement from '../../components/Reports/PLStatement';
@@ -128,11 +127,11 @@ const ProfitLoss = () => {
 
   if (loading && !profitLoss && !refreshing) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-purple-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
@@ -144,7 +143,7 @@ const ProfitLoss = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -417,7 +416,7 @@ const ProfitLoss = () => {
           )}
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

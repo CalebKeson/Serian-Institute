@@ -11,7 +11,6 @@ import {
   Trash2,
   Printer
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
 import { 
@@ -57,17 +56,17 @@ const EventDetails = () => {
   
   if (loading && !currentEvent) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
-      </Layout>
+      </>
     );
   }
   
   if (!currentEvent && !loading) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <Calendar className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Event not found</h3>
@@ -79,7 +78,7 @@ const EventDetails = () => {
             Back to Events
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
   
@@ -98,7 +97,7 @@ const EventDetails = () => {
   };
   
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -273,7 +272,7 @@ const EventDetails = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 };
 

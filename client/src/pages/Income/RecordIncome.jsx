@@ -21,7 +21,6 @@ import {
   Hash,
   Receipt
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useIncomeStore } from '../../stores/incomeStore';
 import { useDirectorStore } from '../../stores/directorStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -635,7 +634,7 @@ const RecordIncome = () => {
   );
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -685,7 +684,7 @@ const RecordIncome = () => {
         {step === 1 && renderStep1()}
         {step === 2 && renderStep2()}
       </div>
-    </Layout>
+    </>
   );
 };
 

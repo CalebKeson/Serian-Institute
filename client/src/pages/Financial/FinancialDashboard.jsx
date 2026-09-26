@@ -12,7 +12,6 @@ import {
   AlertCircle,
   Loader
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useAuthStore } from '../../stores/authStore';
 import { useFinancialStore } from '../../stores/financialStore';
 import { useIncomeStore } from '../../stores/incomeStore';
@@ -155,7 +154,7 @@ const FinancialDashboard = () => {
   const loading = financialLoading || incomeLoading || expenseLoading || directorLoading || refreshing;
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -347,7 +346,7 @@ const FinancialDashboard = () => {
           </>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

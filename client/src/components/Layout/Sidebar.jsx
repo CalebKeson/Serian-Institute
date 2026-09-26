@@ -1,7 +1,7 @@
-// src/components/Layout/Sidebar.jsx - UPDATED WITH ONLINE ENQUIRIES
+// src/components/Layout/Sidebar.jsx - ALWAYS EXPANDED (NO TOGGLES)
 
-import React, { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router";
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useAuthStore } from "../../stores/authStore";
 import { useNotificationStore } from "../../stores/notificationStore";
 import { useRequestStore } from "../../stores/requestStore";
@@ -45,23 +45,36 @@ import {
   UserCircle,
   Building2,
   Star,
-  MessageSquare,  // ADDED for Online Enquiries
-  Globe,           // ADDED for Online Enquiries
-  Mail             // ADDED for Online Enquiries
+  MessageSquare,
+  Globe,
+  Mail,
+  Users as UsersIcon,
+  Menu,
+  X
 } from "lucide-react";
 
 const Sidebar = () => {
   const { user, logout } = useAuthStore();
   const location = useLocation();
-  const [showUserMenu, setShowUserMenu] = useState(false);
+  const navigate = useNavigate();
+  const scrollContainerRef = useRef(null);
   
-  // Menu collapse states
-  const [showFinanceMenu, setShowFinanceMenu] = useState(false);
-  const [showIncomeMenu, setShowIncomeMenu] = useState(false);
-  const [showExpenseMenu, setShowExpenseMenu] = useState(false);
-  const [showReportsMenu, setShowReportsMenu] = useState(false);
-  const [showDirectorsMenu, setShowDirectorsMenu] = useState(false);
-  const [showReferralMenu, setShowReferralMenu] = useState(false);
+  // ============ Persistent scroll position storage ============
+  const savedScrollPositionRef = useRef(0);
+  const isRestoringRef = useRef(false);
+  
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  
+  // ============ NO TOGGLE STATES - All menus are ALWAYS EXPANDED ============
+  // We keep the state variables but they are always true
+  // This prevents re-renders from toggling
+  const [showFinanceMenu] = useState(true);
+  const [showIncomeMenu] = useState(true);
+  const [showExpenseMenu] = useState(true);
+  const [showReportsMenu] = useState(true);
+  const [showDirectorsMenu] = useState(true);
+  const [showReferralMenu] = useState(true);
   
   const { unreadCount } = useNotificationStore();
   const { todayCount } = useRequestStore();
@@ -83,7 +96,6 @@ const Sidebar = () => {
   
   const { 
     fetchOutstandingReport,
-    outstandingReport,
   } = usePaymentStore();
 
   // Fetch outstanding report on mount and periodically
@@ -141,6 +153,41 @@ const Sidebar = () => {
     };
   }, [user?.role, startCoursePolling, stopCoursePolling, startStudentPolling, stopStudentPolling, startInstructorPolling, stopInstructorPolling]);
 
+  // ============ Save scroll position on scroll ============
+  const handleScroll = () => {
+    if (scrollContainerRef.current && !isRestoringRef.current) {
+      savedScrollPositionRef.current = scrollContainerRef.current.scrollTop;
+    }
+  };
+
+  // ============ Restore scroll position on mount/render ============
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    if (savedScrollPositionRef.current > 0) {
+      isRestoringRef.current = true;
+      container.scrollTop = savedScrollPositionRef.current;
+      
+      requestAnimationFrame(() => {
+        isRestoringRef.current = false;
+      });
+    }
+  }, [location.pathname]);
+
+  // ============ Save scroll position before navigation ============
+  const handleNavigation = (path, e) => {
+    if (e) e.preventDefault();
+    
+    if (scrollContainerRef.current) {
+      savedScrollPositionRef.current = scrollContainerRef.current.scrollTop;
+    }
+    
+    if (location.pathname !== path) {
+      navigate(path);
+    }
+  };
+
   // Helper function to format large numbers for display
   const formatBadgeCount = (count) => {
     if (count >= 1000) {
@@ -152,6 +199,11 @@ const Sidebar = () => {
   // Check if a path is active
   const isActive = (path) => location.pathname === path;
   const isPathStartsWith = (paths) => paths.some(path => location.pathname.startsWith(path));
+
+  // Close mobile sidebar when route changes
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [location.pathname]);
 
   // ==================== NAVIGATION BASED ON ROLE ====================
   
@@ -176,7 +228,7 @@ const Sidebar = () => {
     },
   ];
 
-  // 3. ONLINE ENQUIRIES - NEW SECTION (Admin only)
+  // 3. ONLINE ENQUIRIES - Admin only
   const onlineEnquiriesNav = [
     {
       name: "Online Enquiries",
@@ -269,15 +321,13 @@ const Sidebar = () => {
     },
   ];
 
-  // 5. REFERRAL MANAGEMENT - Admin only
+  // 5. REFERRAL MANAGEMENT - Admin only (ALWAYS EXPANDED)
   const referralNavigation = [
     {
       name: "Referrals",
       icon: Trophy,
       roles: ["admin"],
       isOpen: showReferralMenu,
-      setIsOpen: setShowReferralMenu,
-      isActive: () => isPathStartsWith(['/referrers', '/referral-report']),
       submenu: [
         { name: "Manage Referrers", href: "/referrers", icon: Users },
         { name: "Referral Report", href: "/referral-report", icon: BarChart3 },
@@ -285,15 +335,13 @@ const Sidebar = () => {
     },
   ];
 
-  // 6. FINANCIAL MANAGEMENT - Admin only
+  // 6. FINANCIAL MANAGEMENT - Admin only (ALWAYS EXPANDED)
   const financialNavigation = [
     {
       name: "Fee Management",
       icon: DollarSign,
       roles: ["admin", "receptionist"],
       isOpen: showFinanceMenu,
-      setIsOpen: setShowFinanceMenu,
-      isActive: () => isPathStartsWith(['/fees']),
       submenu: [
         { name: "Fee Dashboard", href: "/fees", icon: PieChart },
         { name: "Record Payment", href: "/fees/record-payment", icon: CreditCard },
@@ -306,8 +354,6 @@ const Sidebar = () => {
       icon: TrendingUp,
       roles: ["admin"],
       isOpen: showIncomeMenu,
-      setIsOpen: setShowIncomeMenu,
-      isActive: () => isPathStartsWith(['/income']),
       submenu: [
         { name: "All Income", href: "/income", icon: TrendingUp },
         { name: "Record Income", href: "/income/record", icon: Plus },
@@ -321,8 +367,6 @@ const Sidebar = () => {
       icon: TrendingDown,
       roles: ["admin"],
       isOpen: showExpenseMenu,
-      setIsOpen: setShowExpenseMenu,
-      isActive: () => isPathStartsWith(['/expenses']),
       submenu: [
         { name: "All Expenses", href: "/expenses", icon: TrendingDown },
         { name: "Record Expense", href: "/expenses/add", icon: Plus },
@@ -335,8 +379,6 @@ const Sidebar = () => {
       icon: BarChart3,
       roles: ["admin"],
       isOpen: showReportsMenu,
-      setIsOpen: setShowReportsMenu,
-      isActive: () => isPathStartsWith(['/financial-dashboard', '/financial/profit-loss']),
       submenu: [
         { name: "Financial Dashboard", href: "/financial-dashboard", icon: PieChart },
         { name: "Profit & Loss", href: "/financial/profit-loss", icon: TrendingUp },
@@ -347,15 +389,19 @@ const Sidebar = () => {
     },
   ];
 
-  // 7. ADMINISTRATION - Admin only
+  // 7. ADMINISTRATION - Admin only (ALWAYS EXPANDED)
   const adminNavigation = [
+    {
+      name: "Users",
+      href: "/users",
+      icon: UsersIcon,
+      roles: ["admin"],
+    },
     {
       name: "Directors",
       icon: Landmark,
       roles: ["admin"],
       isOpen: showDirectorsMenu,
-      setIsOpen: setShowDirectorsMenu,
-      isActive: () => isPathStartsWith(['/directors']),
       submenu: [
         { name: "All Directors", href: "/directors", icon: Users },
         { name: "Add Director", href: "/directors/add", icon: Plus },
@@ -385,6 +431,27 @@ const Sidebar = () => {
   const filteredAdminNav = adminNavigation.filter(item => item.roles.includes(user?.role));
   const filteredUserNav = userNavigation.filter(item => item.roles.includes(user?.role));
 
+  // Memoize filtered nav items to prevent unnecessary re-renders
+  const navItems = useMemo(() => ({
+    dashboard: filteredDashboardNav,
+    visitor: filteredVisitorRequestsNav,
+    onlineEnquiries: filteredOnlineEnquiriesNav,
+    academic: filteredAcademicNav,
+    referral: filteredReferralNav,
+    financial: filteredFinancialNav,
+    admin: filteredAdminNav,
+    user: filteredUserNav
+  }), [
+    filteredDashboardNav,
+    filteredVisitorRequestsNav,
+    filteredOnlineEnquiriesNav,
+    filteredAcademicNav,
+    filteredReferralNav,
+    filteredFinancialNav,
+    filteredAdminNav,
+    filteredUserNav
+  ]);
+
   const getRoleColor = (role) => {
     switch (role) {
       case "admin":
@@ -405,102 +472,99 @@ const Sidebar = () => {
   const getRoleBadgeColor = (role) => {
     switch (role) {
       case "admin":
-        return "bg-red-100 text-red-800";
+        return "bg-red-500/20 text-red-400";
       case "receptionist":
-        return "bg-blue-100 text-blue-800";
+        return "bg-blue-500/20 text-blue-400";
       case "instructor":
-        return "bg-purple-100 text-purple-800";
+        return "bg-purple-500/20 text-purple-400";
       case "student":
-        return "bg-indigo-100 text-indigo-800";
+        return "bg-indigo-500/20 text-indigo-400";
       case "parent":
-        return "bg-purple-100 text-purple-800";
+        return "bg-purple-500/20 text-purple-400";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-500/20 text-gray-400";
     }
   };
 
-  // Section Header Component
+  // Section Header Component - COMPACT SINGLE LINE (Without toggle)
   const SectionHeader = ({ title, icon: Icon }) => (
-    <div className="pt-4 pb-2">
-      <div className="px-3 py-2">
-        <div className="flex items-center space-x-2">
-          <div className="h-px flex-1 bg-gray-200"></div>
-          {Icon && <Icon className="w-3 h-3 text-gray-400" />}
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            {title}
-          </span>
-          <div className="h-px flex-1 bg-gray-200"></div>
-        </div>
+    <div className="px-3 py-2 mt-2">
+      <div className="flex items-center gap-2">
+        <div className="h-px flex-1 bg-white/10"></div>
+        {Icon && <Icon className="w-3 h-3 text-gray-500 flex-shrink-0" />}
+        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+          {title}
+        </span>
+        <div className="h-px flex-1 bg-white/10"></div>
       </div>
     </div>
   );
 
-  // Render menu item with submenu
+  // ============ Render menu item - ALWAYS EXPANDED (NO TOGGLE BUTTONS) ============
   const renderMenuItem = (item) => {
     const IconComponent = item.icon;
     const hasBadge = item.badgeCount > 0;
     const isActiveItem = item.isActive ? item.isActive() : isActive(item.href);
 
     if (item.submenu) {
-      const isOpen = item.isOpen;
-      const setIsOpen = item.setIsOpen;
-      
+      // Always expanded - show submenu items directly without toggle
       return (
-        <div key={item.name} className="space-y-1">
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className={`flex items-center w-full px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 group ${
-              isActiveItem
-                ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-l-2 border-blue-600"
-                : "text-gray-600 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 hover:text-gray-900"
-            }`}
-          >
-            <IconComponent className="w-5 h-5 mr-3 transition-transform duration-200 group-hover:scale-110" />
-            <span className="flex-1 text-left">{item.name}</span>
-            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-          </button>
+        <div key={item.name} className="space-y-0.5">
+          {/* Section header without toggle button */}
+          <div className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg ${
+            isActiveItem
+              ? "bg-white/10 text-white shadow-lg shadow-white/5"
+              : "text-gray-400"
+          }`}>
+            <IconComponent className="w-4 h-4 mr-3 transition-transform duration-200 group-hover:scale-110 flex-shrink-0" />
+            <span className="flex-1">{item.name}</span>
+          </div>
 
-          {isOpen && (
-            <div className="ml-4 pl-4 border-l-2 border-gray-200 space-y-1">
-              {item.submenu.map((subItem) => {
-                const SubIcon = subItem.icon;
-                return (
-                  <Link
-                    key={subItem.href}
-                    to={subItem.href}
-                    className={`flex items-center px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 group ${
-                      isActive(subItem.href)
-                        ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700"
-                        : "text-gray-600 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 hover:text-gray-900"
-                    }`}
-                  >
-                    <SubIcon className="w-4 h-4 mr-3 transition-transform duration-200 group-hover:scale-110" />
-                    <span className="flex-1">{subItem.name}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
+          {/* Submenu items always visible */}
+          <div className="ml-3 pl-3 border-l border-white/10 space-y-0.5">
+            {item.submenu.map((subItem) => {
+              const SubIcon = subItem.icon;
+              const isSubActive = isActive(subItem.href);
+              return (
+                <Link
+                  key={subItem.href}
+                  to={subItem.href}
+                  replace={location.pathname === subItem.href}
+                  onClick={(e) => handleNavigation(subItem.href, e)}
+                  className={`flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 group ${
+                    isSubActive
+                      ? "bg-white/10 text-white"
+                      : "text-gray-400 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <SubIcon className="w-3.5 h-3.5 mr-3 transition-transform duration-200 group-hover:scale-110 flex-shrink-0" />
+                  <span className="flex-1 text-xs">{subItem.name}</span>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       );
     }
 
-    // Regular navigation items
+    // Regular link
     return (
       <Link
         key={item.name}
         to={item.href}
-        className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 group ${
+        replace={location.pathname === item.href}
+        onClick={(e) => handleNavigation(item.href, e)}
+        className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 group ${
           isActiveItem
-            ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border-r-2 border-blue-600"
-            : "text-gray-600 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 hover:text-gray-900"
+            ? "bg-white/10 text-white shadow-lg shadow-white/5"
+            : "text-gray-400 hover:text-white hover:bg-white/10"
         }`}
       >
-        <IconComponent className="w-5 h-5 mr-3 transition-transform duration-200 group-hover:scale-110" />
+        <IconComponent className="w-4 h-4 mr-3 transition-transform duration-200 group-hover:scale-110 flex-shrink-0" />
         <span className="flex-1">{item.name}</span>
         {hasBadge && (
-          <span className={`ml-2 h-5 min-w-5 px-1 text-white text-xs rounded-full flex items-center justify-center ${
-            item.name === "Visitor Requests" ? "bg-red-500" : "bg-blue-500"
+          <span className={`ml-2 h-5 min-w-5 px-1.5 text-white text-[10px] font-medium rounded-full flex items-center justify-center ${
+            item.name === "Visitor Requests" ? "bg-red-500/80" : "bg-blue-500/80"
           }`}>
             {formatBadgeCount(item.badgeCount)}
           </span>
@@ -509,101 +573,116 @@ const Sidebar = () => {
     );
   };
 
-  return (
-    <div className="w-64 bg-white shadow-lg min-h-screen flex flex-col sticky top-0 h-screen overflow-y-auto">
+  // Mobile Toggle Button
+  const MobileToggle = () => (
+    <button
+      onClick={() => setIsMobileOpen(!isMobileOpen)}
+      className="md:hidden fixed top-4 left-4 z-50 p-2 bg-gray-800/90 backdrop-blur-sm rounded-lg text-white hover:bg-gray-700 transition-colors border border-white/10"
+    >
+      {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+    </button>
+  );
+
+  // Sidebar Content
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full">
       {/* Logo Section */}
-      <div className="p-6 border-b border-gray-200 flex-shrink-0">
+      <div className="p-4 border-b border-white/10 flex-shrink-0">
         <div className="flex items-center space-x-3">
-          <div className="h-10 w-10 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center">
+          <div className="h-10 w-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25 flex-shrink-0">
             <span className="text-white font-bold text-sm">SI</span>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-900">Serian Institute</h1>
-            <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+          <div className="min-w-0">
+            <h1 className="text-lg font-bold text-white truncate">Serian Institute</h1>
+            <p className="text-xs text-gray-400 capitalize truncate">{user?.role}</p>
           </div>
         </div>
       </div>
 
-      {/* Navigation Menu */}
-      <nav className="mt-4 flex-1 overflow-y-auto">
-        <div className="px-4 space-y-1">
+      {/* Navigation Menu - ALL SUB-MENUS ALWAYS EXPANDED */}
+      <nav 
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto py-2 px-3 custom-scrollbar"
+      >
+        <div className="space-y-0.5">
           {/* 1. DASHBOARD */}
-          {filteredDashboardNav.map(renderMenuItem)}
+          {navItems.dashboard.map(renderMenuItem)}
 
           {/* 2. VISITOR REQUESTS */}
-          {filteredVisitorRequestsNav.map(renderMenuItem)}
+          {navItems.visitor.map(renderMenuItem)}
 
-          {/* 3. ONLINE ENQUIRIES - NEW */}
-          {filteredOnlineEnquiriesNav.length > 0 && (
+          {/* 3. ONLINE ENQUIRIES */}
+          {navItems.onlineEnquiries.length > 0 && (
             <>
               <SectionHeader title="Enquiries" icon={MessageSquare} />
-              {filteredOnlineEnquiriesNav.map(renderMenuItem)}
+              {navItems.onlineEnquiries.map(renderMenuItem)}
             </>
           )}
 
           {/* 4. ACADEMIC MANAGEMENT */}
-          {filteredAcademicNav.length > 0 && (
+          {navItems.academic.length > 0 && (
             <>
               <SectionHeader title="Academic Management" icon={BookOpen} />
-              {filteredAcademicNav.map(renderMenuItem)}
+              {navItems.academic.map(renderMenuItem)}
             </>
           )}
 
           {/* 5. REFERRAL MANAGEMENT */}
-          {filteredReferralNav.length > 0 && (
+          {navItems.referral.length > 0 && (
             <>
               <SectionHeader title="Referral Management" icon={Trophy} />
-              {filteredReferralNav.map(renderMenuItem)}
+              {navItems.referral.map(renderMenuItem)}
             </>
           )}
 
           {/* 6. FINANCIAL MANAGEMENT */}
-          {filteredFinancialNav.length > 0 && user?.role !== 'instructor' && (
+          {navItems.financial.length > 0 && user?.role !== 'instructor' && (
             <>
               <SectionHeader title="Financial Management" icon={DollarSign} />
-              {filteredFinancialNav.map(renderMenuItem)}
+              {navItems.financial.map(renderMenuItem)}
             </>
           )}
 
           {/* 7. ADMINISTRATION */}
-          {filteredAdminNav.length > 0 && user?.role !== 'instructor' && (
+          {navItems.admin.length > 0 && user?.role !== 'instructor' && (
             <>
               <SectionHeader title="Administration" icon={Settings} />
-              {filteredAdminNav.map(renderMenuItem)}
+              {navItems.admin.map(renderMenuItem)}
             </>
           )}
 
           {/* 8. USER SECTION */}
-          {filteredUserNav.length > 0 && (
+          {navItems.user.length > 0 && (
             <>
               <SectionHeader title="User" icon={User} />
-              {filteredUserNav.map(renderMenuItem)}
+              {navItems.user.map(renderMenuItem)}
             </>
           )}
         </div>
       </nav>
 
       {/* User Section at Bottom */}
-      <div className="p-4 border-t border-gray-200 bg-white flex-shrink-0">
-        <div className="mb-3 px-3">
+      <div className="p-3 border-t border-white/10 bg-white/5 flex-shrink-0">
+        <div className="mb-2 px-2">
           <Link
             to="/notifications"
-            className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 group transition-colors"
+            className="flex items-center justify-between p-2 rounded-lg hover:bg-white/10 transition-colors group"
           >
             <div className="flex items-center">
               <div className="relative">
-                <Bell className="w-5 h-5 text-gray-500 group-hover:text-blue-600 transition-colors" />
+                <Bell className="w-4 h-4 text-gray-400 group-hover:text-white transition-colors" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">{unreadCount > 9 ? "9+" : unreadCount}</span>
+                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center animate-pulse">
+                    <span className="text-white text-[10px] font-bold">{unreadCount > 9 ? "9+" : unreadCount}</span>
                   </span>
                 )}
               </div>
-              <span className="ml-2 text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors">
+              <span className="ml-2 text-sm font-medium text-gray-400 group-hover:text-white transition-colors">
                 Notifications
               </span>
             </div>
-            {unreadCount > 0 && <span className="h-2 w-2 bg-red-500 rounded-full animate-pulse"></span>}
+            {unreadCount > 0 && <span className="h-1.5 w-1.5 bg-red-500 rounded-full animate-pulse"></span>}
           </Link>
         </div>
 
@@ -611,40 +690,122 @@ const Sidebar = () => {
         <div className="relative">
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 group"
+            className="w-full flex items-center space-x-3 p-2 rounded-xl hover:bg-white/10 transition-all duration-200 group"
           >
-            <div className={`h-10 w-10 bg-gradient-to-r ${getRoleColor(user?.role)} rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-105`}>
+            <div className={`h-9 w-9 bg-gradient-to-r ${getRoleColor(user?.role)} rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-105 flex-shrink-0`}>
               <span className="text-white font-bold text-sm">{user?.name?.charAt(0).toUpperCase()}</span>
             </div>
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
-              <div className="flex items-center gap-1">
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${getRoleBadgeColor(user?.role)} capitalize`}>
+              <p className="text-sm font-medium text-white truncate">{user?.name}</p>
+              <div className="flex items-center gap-1.5">
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${getRoleBadgeColor(user?.role)} capitalize`}>
                   {user?.role}
                 </span>
-                <span className="text-xs text-gray-500 truncate">{user?.email}</span>
               </div>
             </div>
-            {showUserMenu ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+            {showUserMenu ? (
+              <ChevronUp className="w-3.5 h-3.5 text-gray-400" />
+            ) : (
+              <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+            )}
           </button>
 
           {showUserMenu && (
-            <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 animate-fadeIn">
-              <Link to="/profile" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors" onClick={() => setShowUserMenu(false)}>
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-gray-800/95 backdrop-blur-sm rounded-xl border border-white/10 py-1 z-10 shadow-xl">
+              <Link 
+                to="/profile" 
+                className="flex items-center px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/10 transition-colors rounded-lg mx-1"
+                onClick={() => setShowUserMenu(false)}
+              >
                 <UserCircle className="w-4 h-4 mr-2" /> My Profile
               </Link>
-              <Link to="/settings" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors" onClick={() => setShowUserMenu(false)}>
+              <Link 
+                to="/settings" 
+                className="flex items-center px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/10 transition-colors rounded-lg mx-1"
+                onClick={() => setShowUserMenu(false)}
+              >
                 <Settings className="w-4 h-4 mr-2" /> Settings
               </Link>
-              <div className="border-t border-gray-100 my-1"></div>
-              <button onClick={() => { logout(); setShowUserMenu(false); }} className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors">
-                <LogOut className="w-4 h-4 mr-2" /> Logout
+              <div className="border-t border-white/10 my-1 mx-2"></div>
+              <button 
+                onClick={() => { logout(); setShowUserMenu(false); }} 
+                className="flex items-center w-full px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors rounded-lg mx-1"
+              >
+                <LogOut className="w-4 h-4 mr-2" /> Sign Out
               </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* ============ CUSTOM DARK SCROLLBAR STYLES ============ */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 10px;
+          transition: background 0.3s ease;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+        }
+      `}</style>
     </div>
+  );
+
+  return (
+    <>
+      {/* Mobile Toggle */}
+      <MobileToggle />
+
+      {/* Sidebar - Desktop */}
+      <div className="hidden md:block w-64 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 min-h-screen flex-shrink-0 sticky top-0 h-screen overflow-hidden shadow-2xl shadow-black/20">
+        <SidebarContent />
+      </div>
+
+      {/* Sidebar - Mobile Overlay */}
+      {isMobileOpen && (
+        <div className="md:hidden fixed inset-0 z-40">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsMobileOpen(false)}
+          ></div>
+          <div className="absolute top-0 left-0 w-72 h-full bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 shadow-2xl shadow-black/50 animate-slideInRight overflow-hidden">
+            <SidebarContent />
+          </div>
+        </div>
+      )}
+
+      {/* Animation styles */}
+      <style>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(-100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        .animate-slideInRight {
+          animation: slideInRight 0.3s ease-out forwards;
+        }
+      `}</style>
+    </>
   );
 };
 

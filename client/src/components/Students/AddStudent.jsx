@@ -205,7 +205,7 @@ const AddStudent = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -732,7 +732,7 @@ const AddStudent = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

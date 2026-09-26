@@ -1,8 +1,7 @@
-// components/Enquiry/EnquiryList.jsx - MOVED TO COMPONENTS/ENQUIRY
+// src/components/Enquiry/EnquiryList.jsx - COMPLETE FIXED VERSION (NO INFINITE LOOP)
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router';
-import Layout from '../Layout/Layout';
 import { useEnquiryStore } from '../../stores/enquiryStore';
 import {
   Search,
@@ -23,7 +22,8 @@ import {
   Download,
   Loader,
   TrendingUp,
-  ArrowRight
+  ArrowRight,
+  X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -47,9 +47,24 @@ const EnquiryList = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSource, setFilterSource] = useState('');
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
+  // Use a ref to track if initial load has been done
+  const initialLoadRef = useRef(false);
+
+  // Load enquiries only once on mount
   useEffect(() => {
-    loadEnquiries();
+    if (!initialLoadRef.current) {
+      initialLoadRef.current = true;
+      loadEnquiries();
+    }
+  }, []);
+
+  // Load enquiries when filters change - but only if not initial load
+  useEffect(() => {
+    if (!isInitialLoad) {
+      loadEnquiries();
+    }
   }, [filters]);
 
   const loadEnquiries = async () => {
@@ -57,7 +72,9 @@ const EnquiryList = () => {
   };
 
   const handleSearch = () => {
+    setIsInitialLoad(false);
     setFilters({ ...filters, search: searchTerm });
+    fetchEnquiries();
   };
 
   const handleKeyPress = (e) => {
@@ -67,12 +84,14 @@ const EnquiryList = () => {
   };
 
   const handleFilterApply = () => {
+    setIsInitialLoad(false);
     setFilters({ 
       ...filters, 
       status: filterStatus,
       source: filterSource
     });
     setShowFilters(false);
+    fetchEnquiries();
   };
 
   const handleClearFilters = () => {
@@ -81,6 +100,8 @@ const EnquiryList = () => {
     setFilterSource('');
     setSearchTerm('');
     setShowFilters(false);
+    setIsInitialLoad(false);
+    fetchEnquiries();
   };
 
   const handleConvertToVisit = async (id) => {
@@ -187,16 +208,16 @@ const EnquiryList = () => {
 
   if (loading && !enquiries.length) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-blue-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -570,7 +591,7 @@ const EnquiryList = () => {
           )}
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

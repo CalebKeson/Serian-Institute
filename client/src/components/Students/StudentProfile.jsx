@@ -259,17 +259,17 @@ const StudentProfile = () => {
 
   if (studentLoading && !currentStudent) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentStudent && !studentLoading) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <User className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Student not found</h3>
@@ -281,7 +281,7 @@ const StudentProfile = () => {
             Back to Students
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
@@ -292,7 +292,7 @@ const StudentProfile = () => {
   const hasEnrollments = enrollmentsArray.length > 0;
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -956,7 +956,7 @@ const StudentProfile = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

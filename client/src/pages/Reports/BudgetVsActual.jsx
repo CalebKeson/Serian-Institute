@@ -18,7 +18,6 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useFinancialStore } from '../../stores/financialStore';
 import { useAuthStore } from '../../stores/authStore';
 import BudgetTable from '../../components/Reports/BudgetTable';
@@ -112,11 +111,11 @@ const BudgetVsActual = () => {
 
   if (loading && !budgetVsActual && !refreshing) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-purple-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
@@ -134,7 +133,7 @@ const BudgetVsActual = () => {
   const onBudgetCategories = categorySummary.filter(c => c.variance === 0);
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -473,7 +472,7 @@ const BudgetVsActual = () => {
           )}
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

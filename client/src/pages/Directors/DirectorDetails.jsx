@@ -22,7 +22,6 @@ import {
   Printer,
   Download
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useDirectorStore } from '../../stores/directorStore';
 import { useAuthStore } from '../../stores/authStore';
 import InvestmentModal from '../../components/Directors/InvestmentModal';
@@ -116,17 +115,17 @@ const DirectorDetails = () => {
 
   if (loading && !currentDirector) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-blue-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentDirector && !loading) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Director not found</h3>
@@ -138,7 +137,7 @@ const DirectorDetails = () => {
             Back to Directors
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
@@ -151,7 +150,7 @@ const DirectorDetails = () => {
   const recentTransactions = currentDirector?.recentTransactions || [];
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -543,7 +542,7 @@ const DirectorDetails = () => {
           loadDirector();
         }}
       />
-    </Layout>
+    </>
   );
 };
 

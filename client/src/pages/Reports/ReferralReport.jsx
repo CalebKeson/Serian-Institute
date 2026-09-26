@@ -25,7 +25,6 @@ import {
   Mail,
   Phone
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useReferralStore } from '../../stores/referralStore';
 import { useAuthStore } from '../../stores/authStore';
 import { formatCurrency } from '../../utils/feeFormatter';
@@ -181,19 +180,19 @@ const ReferralReport = () => {
 
   if (loading && !referrers.length) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="text-center">
             <Loader className="w-12 h-12 animate-spin text-purple-600 mx-auto mb-4" />
             <p className="text-gray-600">Loading referral data...</p>
           </div>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -754,7 +753,7 @@ const ReferralReport = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 };
 

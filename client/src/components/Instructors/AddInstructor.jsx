@@ -25,7 +25,6 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import Layout from "../../components/Layout/Layout";
 import { useInstructorStore } from "../../stores/instructorStore";
 import { useAuthStore } from "../../stores/authStore";
 import { formatInstructorForAPI } from "../../utils/instructorDataFormatter";
@@ -307,7 +306,7 @@ const AddInstructor = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -749,7 +748,7 @@ const AddInstructor = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

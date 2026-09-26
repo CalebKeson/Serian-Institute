@@ -19,7 +19,6 @@ import {
   Coffee,
   Heart
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useFinancialStore } from '../../stores/financialStore';
 import { useAuthStore } from '../../stores/authStore';
 import CashFlowTable from '../../components/Reports/CashFlowTable';
@@ -132,11 +131,11 @@ const CashFlow = () => {
 
   if (loading && !cashFlow && !refreshing) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-purple-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
@@ -148,7 +147,7 @@ const CashFlow = () => {
   const closingBalance = cashFlow?.closingBalance || 0;
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -435,7 +434,7 @@ const CashFlow = () => {
           )}
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

@@ -14,7 +14,6 @@ import {
   User,
   Receipt
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useIncomeStore } from '../../stores/incomeStore';
 import { useDirectorStore } from '../../stores/directorStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -142,17 +141,17 @@ const EditIncome = () => {
 
   if (loading && initialLoad) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-green-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentIncomeTransaction && !loading) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Income not found</h3>
@@ -164,7 +163,7 @@ const EditIncome = () => {
             Back to Income
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
@@ -181,7 +180,7 @@ const EditIncome = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -399,7 +398,7 @@ const EditIncome = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

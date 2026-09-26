@@ -1,4 +1,3 @@
-// controllers/request.controller.js - COMPLETE UPDATED VERSION
 
 import Request from '../models/request.model.js';
 import User from '../models/user.model.js';
@@ -12,19 +11,17 @@ import NotificationService from '../services/notificationService.js';
 // @route   POST /api/requests
 export const createRequest = async (req, res, next) => {
   try {
-    // Only receptionists can create requests
     if (req.user.role !== 'receptionist' && req.user.role !== 'admin') {
       return next(errorHandler(403, 'Only receptionists can create visitor requests'));
     }
 
     const requestData = {
       ...req.body,
-      receptionist: req.user._id // Auto-assign logged-in receptionist
+      receptionist: req.user._id
     };
 
     const request = await Request.create(requestData);
 
-    // NOTIFICATION: New request created - Notify admins
     NotificationService.createForRole('admin', {
       title: 'New Visitor Request',
       message: `New visitor request from ${request.visitorName || 'a visitor'} (${request.purpose || 'General'})`,
@@ -49,23 +46,15 @@ export const getAllRequests = async (req, res, next) => {
     
     let filter = {};
     
-    // Filter by status
     if (status) filter.status = status;
-    
-    // Filter by department
     if (department) filter.department = department;
-    
-    // Filter by priority
     if (priority) filter.priority = priority;
-    
-    // Filter by assigned staff
     if (assignedTo) filter.assignedTo = assignedTo;
     
     // Filter by type (online vs physical)
     if (type === 'online') filter.isOnlineEnquiry = true;
     else if (type === 'physical') filter.isOnlineEnquiry = { $ne: true };
     
-    // Filter by date range
     if (startDate || endDate) {
       const dateField = filter.isOnlineEnquiry ? 'submittedAt' : 'createdAt';
       filter[dateField] = {};
@@ -73,7 +62,6 @@ export const getAllRequests = async (req, res, next) => {
       if (endDate) filter[dateField].$lte = new Date(endDate);
     }
     
-    // If user is receptionist (not admin), only show their requests
     if (req.user.role === 'receptionist') {
       filter.receptionist = req.user._id;
     }
@@ -109,7 +97,6 @@ export const getRequest = async (req, res, next) => {
       return next(errorHandler(404, 'Request not found'));
     }
 
-    // Check permissions
     const userId = req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
     const isReceptionistOwner = request.receptionist._id.toString() === userId;
@@ -138,7 +125,6 @@ export const updateRequest = async (req, res, next) => {
       return next(errorHandler(404, 'Request not found'));
     }
 
-    // Check permissions
     const userId = req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
     const isReceptionistOwner = request.receptionist.toString() === userId;
@@ -148,11 +134,9 @@ export const updateRequest = async (req, res, next) => {
       return next(errorHandler(403, 'Not authorized to update this request'));
     }
 
-    // Track if status changed
     const oldStatus = request.status;
     let newStatus = oldStatus;
 
-    // Define what each role can update
     const updatableFields = [];
     
     if (isAdmin) {
@@ -165,7 +149,6 @@ export const updateRequest = async (req, res, next) => {
       updatableFields.push('status', 'notes');
     }
     
-    // Apply updates
     updatableFields.forEach(field => {
       if (req.body[field] !== undefined) {
         if (field === 'notes' && Array.isArray(req.body.notes)) {
@@ -185,21 +168,18 @@ export const updateRequest = async (req, res, next) => {
       }
     });
 
-    // If status changed to completed, set resolved date
     if (req.body.status === 'completed' && !request.resolvedDate) {
       request.resolvedDate = new Date();
     }
 
     await request.save();
 
-    // Populate before sending response
     const populatedRequest = await Request.findById(request._id)
       .populate('receptionist', 'name email')
       .populate('assignedTo', 'name email role')
       .populate('notes.addedBy', 'name role')
       .populate('courseOfInterest', 'courseCode name');
 
-    // NOTIFICATION: Status changed
     if (newStatus !== oldStatus) {
       const recipientIds = [];
       
@@ -542,7 +522,7 @@ export const getTodayRequestCount = async (req, res, next) => {
   }
 };
 
-// ============ NEW: ONLINE ENQUIRY SUBMISSION (Public) ============
+// ============ ONLINE ENQUIRY SUBMISSION (Public) ============
 
 // @desc    Submit online enquiry (public - no authentication)
 // @route   POST /api/requests/enquiry
@@ -555,15 +535,16 @@ export const submitEnquiry = async (req, res, next) => {
       visitorEmail,
       visitorPhone,
       
-      // Enquiry Details
+      // Enquiry Details - FIXED: Better mapping
       enquiryType,
+      purpose,  // Now directly receiving purpose from frontend
       message,
       courseOfInterest,
       courseOfInterestNames,
       preferredContactMethod,
       bestTimeToContact,
       
-      // Source Tracking (captured from frontend)
+      // Source Tracking
       source,
       sourceOther,
       sourceUrl,
@@ -583,6 +564,15 @@ export const submitEnquiry = async (req, res, next) => {
       ipAddress
     } = req.body;
 
+    console.log('📝 Enquiry submission received:', {
+      visitorName,
+      visitorEmail,
+      enquiryType,
+      purpose,
+      source,
+      message: message?.substring(0, 50) + '...'
+    });
+
     // ============ VALIDATION ============
     if (!visitorName || visitorName.trim() === '') {
       return next(errorHandler(400, 'Full name is required'));
@@ -601,17 +591,50 @@ export const submitEnquiry = async (req, res, next) => {
     }
 
     // ============ FIND OR CREATE RECEPTIONIST ============
-    // Find the first admin to assign as receptionist
     let receptionist = await User.findOne({ role: 'admin', isActive: true });
     
     if (!receptionist) {
-      // Fallback: find any active user
       receptionist = await User.findOne({ isActive: true });
     }
     
     if (!receptionist) {
       return next(errorHandler(500, 'No receptionist available to handle enquiries'));
     }
+
+    // ============ FIXED: Map enquiryType to purpose and department ============
+    // This mapping ensures the purpose and department are set correctly
+    const enquiryMapping = {
+      'course_inquiry': { purpose: 'Admission Inquiry', department: 'Admissions' },
+      'admission_inquiry': { purpose: 'Admission Inquiry', department: 'Admissions' },
+      'fee_inquiry': { purpose: 'Fee Payment', department: 'Accounts' },
+      'general_inquiry': { purpose: 'Other', department: 'Administration' },
+      'complaint': { purpose: 'Complaint', department: 'Administration' },
+      'feedback': { purpose: 'Other', department: 'Administration' },
+      'other': { purpose: 'Other', department: 'Administration' }
+    };
+
+    // Use the purpose from the frontend if provided, otherwise map from enquiryType
+    let finalPurpose = purpose;
+    let finalDepartment = 'Administration';
+    
+    if (enquiryType && enquiryMapping[enquiryType]) {
+      // If purpose wasn't explicitly provided, use the mapped value
+      if (!finalPurpose) {
+        finalPurpose = enquiryMapping[enquiryType].purpose;
+      }
+      finalDepartment = enquiryMapping[enquiryType].department;
+    }
+    
+    // If still no purpose, default to 'Other'
+    if (!finalPurpose) {
+      finalPurpose = 'Other';
+    }
+
+    console.log('📋 Mapped enquiry:', { 
+      enquiryType, 
+      purpose: finalPurpose, 
+      department: finalDepartment 
+    });
 
     // ============ CREATE ENQUIRY ============
     const enquiryData = {
@@ -620,10 +643,10 @@ export const submitEnquiry = async (req, res, next) => {
       visitorEmail: visitorEmail.toLowerCase().trim(),
       visitorPhone: visitorPhone.trim(),
       
-      // Enquiry Details
+      // Enquiry Details - FIXED: Use mapped values
       description: message.trim(),
-      purpose: enquiryType === 'admission_inquiry' ? 'Admission Inquiry' : 
-               enquiryType === 'fee_inquiry' ? 'Fee Payment' : 'Other',
+      purpose: finalPurpose,
+      department: finalDepartment,
       enquiryType: enquiryType || 'general_inquiry',
       message: message.trim(),
       courseOfInterest: courseOfInterest || [],
@@ -656,8 +679,9 @@ export const submitEnquiry = async (req, res, next) => {
 
     const enquiry = await Request.create(enquiryData);
 
+    console.log('✅ Enquiry created:', enquiry._id, 'Purpose:', enquiry.purpose, 'Department:', enquiry.department);
+
     // ============ UPDATE ANALYTICS ============
-    // Mark analytics records as converted
     if (visitorId) {
       await Analytics.updateMany(
         { visitorId: visitorId },
@@ -672,13 +696,11 @@ export const submitEnquiry = async (req, res, next) => {
     }
 
     // ============ SEND NOTIFICATIONS ============
-    // Notify all admins about the new enquiry
     const admins = await User.find({ role: 'admin', isActive: true }).select('_id');
     
     if (admins.length > 0) {
       const adminIds = admins.map(a => a._id);
       
-      // Get source display name
       const sourceMap = {
         google: 'Google Search',
         facebook: 'Facebook',
@@ -697,7 +719,7 @@ export const submitEnquiry = async (req, res, next) => {
         adminIds,
         {
           title: '📝 New Online Enquiry',
-          message: `New enquiry from ${visitorName} (${visitorEmail}) via ${sourceDisplay}`,
+          message: `New enquiry from ${visitorName} (${visitorEmail}) - ${finalPurpose} via ${sourceDisplay}`,
           type: 'request',
           actionUrl: `/requests/${enquiry._id}`
         }
@@ -718,6 +740,8 @@ export const submitEnquiry = async (req, res, next) => {
         visitorEmail: enquiry.visitorEmail,
         visitorPhone: enquiry.visitorPhone,
         enquiryType: enquiry.enquiryTypeDisplay,
+        purpose: enquiry.purpose,
+        department: enquiry.department,
         submittedAt: enquiry.submittedAt,
         source: enquiry.sourceDisplay
       }
@@ -736,7 +760,6 @@ export const convertEnquiryToVisit = async (req, res, next) => {
   try {
     const { id } = req.params;
     
-    // Check permissions
     if (req.user.role !== 'admin' && req.user.role !== 'receptionist') {
       return next(errorHandler(403, 'Not authorized to convert enquiries'));
     }
@@ -755,13 +778,11 @@ export const convertEnquiryToVisit = async (req, res, next) => {
       return next(errorHandler(400, 'This enquiry has already been converted to a visit'));
     }
 
-    // Mark as converted
     enquiry.convertedToVisit = true;
     enquiry.convertedAt = new Date();
     enquiry.status = 'in-progress';
     await enquiry.save();
 
-    // Get the populated enquiry
     const populatedEnquiry = await Request.findById(id)
       .populate('receptionist', 'name email')
       .populate('assignedTo', 'name email role')
@@ -778,3 +799,19 @@ export const convertEnquiryToVisit = async (req, res, next) => {
     next(errorHandler(500, error.message));
   }
 };
+
+// Export all functions
+// export {
+//   createRequest,
+//   getAllRequests,
+//   getRequest,
+//   updateRequest,
+//   deleteRequest,
+//   addNote,
+//   getRequestStats,
+//   getStaffMembers,
+//   assignRequest,
+//   getTodayRequestCount,
+//   submitEnquiry,
+//   convertEnquiryToVisit
+// };

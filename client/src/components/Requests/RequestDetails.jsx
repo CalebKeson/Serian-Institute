@@ -1,7 +1,6 @@
 // src/pages/Requests/RequestDetails.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
-import Layout from "../../components/Layout/Layout";
 import { useRequestStore } from "../../stores/requestStore";
 import { useAuthStore } from "../../stores/authStore";
 import toast from "react-hot-toast";
@@ -99,17 +98,17 @@ const RequestDetails = () => {
 
   if (loading) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentRequest) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <h2 className="text-xl font-bold text-gray-900 mb-2">
             Request Not Found
@@ -124,12 +123,12 @@ const RequestDetails = () => {
             Back to Requests
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -377,7 +376,7 @@ const RequestDetails = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

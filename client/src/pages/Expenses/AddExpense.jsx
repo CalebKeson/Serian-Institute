@@ -17,7 +17,6 @@ import {
   Package,
   Tag
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useExpenseStore } from '../../stores/expenseStore';
 import { useAuthStore } from '../../stores/authStore';
 import ExpenseItemsForm from '../../components/Expenses/ExpenseItemsForm';
@@ -177,7 +176,7 @@ const AddExpense = () => {
   ];
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -431,7 +430,7 @@ const AddExpense = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

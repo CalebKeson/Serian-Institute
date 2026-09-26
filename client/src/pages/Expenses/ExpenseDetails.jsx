@@ -26,7 +26,6 @@ import {
   Plus,
   Send, // ADD THIS IMPORT for Submit icon
 } from "lucide-react";
-import Layout from "../../components/Layout/Layout";
 import { useExpenseStore } from "../../stores/expenseStore";
 import { useAuthStore } from "../../stores/authStore";
 import ExpenseBreakdown from "../../components/Expenses/ExpenseBreakdown";
@@ -229,17 +228,17 @@ const ExpenseDetails = () => {
 
   if (loading && !currentExpense && !refreshing) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-red-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentExpense && !loading) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">
@@ -255,12 +254,12 @@ const ExpenseDetails = () => {
             Back to Expenses
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -699,7 +698,7 @@ const ExpenseDetails = () => {
         expense={currentExpense}
         loading={loading}
       />
-    </Layout>
+    </>
   );
 };
 

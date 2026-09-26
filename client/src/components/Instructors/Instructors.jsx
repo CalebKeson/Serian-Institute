@@ -15,7 +15,6 @@ import {
   UserX,
   Loader
 } from "lucide-react";
-import Layout from "../../components/Layout/Layout";
 import InstructorTable from "../../components/Instructors/InstructorTable";
 import SalaryPaymentModal from "../../components/Instructors/SalaryPaymentModal";
 import ExportButtons from "../../components/Fees/ExportButtons";
@@ -176,7 +175,7 @@ const Instructors = () => {
   };
 
   return (
-    <Layout>
+    <>
       {/* Header Section */}
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -441,7 +440,7 @@ const Instructors = () => {
           onSuccess={handleSalaryPaid}
         />
       )}
-    </Layout>
+    </>
   );
 };
 

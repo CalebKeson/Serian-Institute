@@ -21,7 +21,6 @@ import {
   Plus,
   Trash2
 } from "lucide-react";
-import Layout from "../../components/Layout/Layout";
 import { useInstructorStore } from "../../stores/instructorStore";
 import { useAuthStore } from "../../stores/authStore";
 import { formatInstructorForAPI, formatInstructorForForm } from '../../utils/instructorDataFormatter';
@@ -316,17 +315,17 @@ const EditInstructor = () => {
 
   if (loading && !currentInstructor) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-blue-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentInstructor && !loading) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Instructor not found</h3>
@@ -338,12 +337,12 @@ const EditInstructor = () => {
             Back to Instructors
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -750,7 +749,7 @@ const EditInstructor = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

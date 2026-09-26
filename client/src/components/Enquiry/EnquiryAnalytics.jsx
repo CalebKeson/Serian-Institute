@@ -1,7 +1,6 @@
 // components/Enquiry/EnquiryAnalytics.jsx - MOVED TO COMPONENTS/ENQUIRY
 
 import React, { useState, useEffect } from 'react';
-import Layout from '../Layout/Layout';
 import { useAnalyticsStore } from '../../stores/analyticsStore';
 import { useEnquiryStore } from '../../stores/enquiryStore';
 import {
@@ -181,19 +180,19 @@ const EnquiryAnalytics = () => {
 
   if (loading && !analyticsSummary) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="text-center">
             <Loader className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
             <p className="text-gray-600">Loading analytics...</p>
           </div>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -766,7 +765,7 @@ const EnquiryAnalytics = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

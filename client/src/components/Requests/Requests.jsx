@@ -1,10 +1,11 @@
-// src/pages/Requests/Requests.jsx
+
 import React, { useState, useEffect } from 'react';
 import Layout from '../../components/Layout/Layout';
 import { useRequestStore } from '../../stores/requestStore';
 import CreateRequestForm from '../../components/Requests/CreateRequestForm';
 import RequestList from '../../components/Requests/RequestList';
 import RequestStats from '../../components/Requests/RequestStats';
+import { Plus, RefreshCw, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Requests = () => {
@@ -63,9 +64,7 @@ const Requests = () => {
               className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 flex items-center gap-2"
               disabled={loading}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
             
@@ -73,9 +72,7 @@ const Requests = () => {
               onClick={() => setShowCreateForm(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus className="w-4 h-4" />
               New Request
             </button>
           </div>
@@ -115,10 +112,10 @@ const Requests = () => {
         </div>
       </div>
       
-      {/* Create Request Modal */}
+      {/* Create Request Modal - FIXED: Lighter background with glass effect */}
       {showCreateForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100">
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Create New Visitor Request</h2>
@@ -128,11 +125,9 @@ const Requests = () => {
               </div>
               <button
                 onClick={() => setShowCreateForm(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-6 h-6" />
               </button>
             </div>
             <CreateRequestForm 

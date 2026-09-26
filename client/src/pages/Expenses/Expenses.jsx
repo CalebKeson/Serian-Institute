@@ -21,7 +21,6 @@ import {
   Calendar,
   X
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useExpenseStore } from '../../stores/expenseStore';
 import { useAuthStore } from '../../stores/authStore';
 import ExpenseTable from '../../components/Expenses/ExpenseTable';
@@ -215,7 +214,7 @@ const Expenses = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -504,7 +503,7 @@ const Expenses = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

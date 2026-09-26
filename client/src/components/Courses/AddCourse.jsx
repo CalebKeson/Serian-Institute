@@ -236,7 +236,7 @@ const AddCourse = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -868,7 +868,7 @@ const AddCourse = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

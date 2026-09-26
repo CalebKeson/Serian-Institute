@@ -190,17 +190,17 @@ const EditStudent = () => {
 
   if (loading && !currentStudent) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-blue-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentStudent && !loading) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Student not found</h3>
@@ -212,12 +212,12 @@ const EditStudent = () => {
             Back to Students
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-between">
@@ -609,7 +609,7 @@ const EditStudent = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

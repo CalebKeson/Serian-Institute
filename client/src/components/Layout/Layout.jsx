@@ -1,6 +1,8 @@
-// src/components/Layout/Layout.jsx - SIMPLIFIED BUT OPTIMIZED
+// src/components/Layout/Layout.jsx
+
 import React from 'react';
 import Sidebar from './Sidebar';
+// import ScrollToTop from './ScrollToTop';
 
 const Layout = ({ children }) => {
   return (
@@ -12,7 +14,6 @@ const Layout = ({ children }) => {
       
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        {/* Mobile header - Reduced padding and better spacing */}
         <header className="md:hidden bg-white shadow-sm border-b sticky top-0 z-10">
           <div className="flex items-center justify-between px-3 py-2">
             <div className="flex items-center space-x-2">
@@ -21,7 +22,6 @@ const Layout = ({ children }) => {
               </div>
               <span className="font-semibold text-gray-900 text-sm">Serian Institute</span>
             </div>
-            {/* Simple menu button - you can add mobile sidebar toggle later */}
             <div className="h-7 w-7 rounded-lg bg-gray-100 flex items-center justify-center">
               <div className="w-4 h-0.5 bg-gray-600 mb-1"></div>
               <div className="w-4 h-0.5 bg-gray-600"></div>
@@ -30,8 +30,8 @@ const Layout = ({ children }) => {
         </header>
         
         {/* Page Content - Responsive padding */}
-        <main className="flex-1 overflow-x-hidden">
-          {/* Responsive padding: smaller on mobile, larger on desktop */}
+        <main className="flex-1 overflow-x-hidden overflow-y-auto" id="main-content">
+          {/* <ScrollToTop />  */}
           <div className="p-3 sm:p-4 md:p-5 lg:p-6">
             {children}
           </div>

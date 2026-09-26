@@ -1,6 +1,5 @@
 // src/pages/Settings/Settings.jsx
 import React, { useState, useEffect } from 'react';
-import Layout from '../../components/Layout/Layout';
 import { useAuthStore } from '../../stores/authStore';
 import toast from 'react-hot-toast';
 
@@ -121,16 +120,16 @@ const Settings = () => {
 
   if (!user) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -609,7 +608,7 @@ const Settings = () => {
           </div>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

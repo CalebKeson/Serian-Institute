@@ -31,7 +31,6 @@ import {
   X,
   Save
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useReferralStore } from '../../stores/referralStore';
 import { useAuthStore } from '../../stores/authStore';
 import { formatCurrency } from '../../utils/feeFormatter';
@@ -282,7 +281,7 @@ const ReferrerManagement = () => {
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -914,7 +913,7 @@ const ReferrerManagement = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 };
 

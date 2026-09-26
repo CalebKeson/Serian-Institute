@@ -23,7 +23,6 @@ import {
   Target,
   TrendingUp
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useExpenseStore } from '../../stores/expenseStore';
 import { useAuthStore } from '../../stores/authStore';
 import CategoryTable from '../../components/Expenses/CategoryTable';
@@ -241,7 +240,7 @@ const Categories = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -700,7 +699,7 @@ const Categories = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

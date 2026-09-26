@@ -23,7 +23,6 @@ import {
   PieChart,
   LineChart
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useIncomeStore } from '../../stores/incomeStore';
 import { useAuthStore } from '../../stores/authStore';
 import IncomeTable from '../../components/Income/IncomeTable';
@@ -243,7 +242,7 @@ const Income = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -547,7 +546,7 @@ const Income = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

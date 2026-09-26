@@ -28,7 +28,6 @@ import {
   PieChart,
   Link as LinkIcon
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useIncomeStore } from '../../stores/incomeStore';
 import { useAuthStore } from '../../stores/authStore';
 import AllocationModal from '../../components/Income/AllocationModal';
@@ -192,17 +191,17 @@ const IncomeDetails = () => {
 
   if (loading && !currentIncomeTransaction && !refreshing) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-8 h-8 animate-spin text-green-600" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentIncomeTransaction && !loading) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900">Income not found</h3>
@@ -214,7 +213,7 @@ const IncomeDetails = () => {
             Back to Income
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
@@ -228,7 +227,7 @@ const IncomeDetails = () => {
   const canDelete = currentIncomeTransaction?.allocatedAmount === 0 && currentIncomeTransaction?.status !== 'cancelled';
 
   return (
-    <Layout>
+    <>
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -605,7 +604,7 @@ const IncomeDetails = () => {
           loadIncome();
         }}
       />
-    </Layout>
+    </>
   );
 };
 

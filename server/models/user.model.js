@@ -1,3 +1,4 @@
+
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
@@ -40,6 +41,38 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    
+    // ============ PROFILE FIELDS ============
+    phone: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    address: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    dateOfBirth: {
+      type: Date,
+      default: null
+    },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other', 'prefer_not_to_say'],
+      default: 'prefer_not_to_say'
+    },
+    bio: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Bio cannot exceed 500 characters"],
+      default: ""
+    },
+    avatarUrl: {
+      type: String,
+      trim: true,
+      default: ""
+    }
   },
   {
     timestamps: true,

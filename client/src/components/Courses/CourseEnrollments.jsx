@@ -18,7 +18,6 @@ import {
   Hash,
   GraduationCap
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useCourseStore } from '../../stores/courseStore';
 import { useEnrollmentStore } from '../../stores/enrollmentStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -296,20 +295,20 @@ const CourseEnrollments = () => {
   // Show loading state
   if (courseLoading && !currentCourse && !refreshing && !initialLoadDone) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="text-center">
             <Loader className="w-12 h-12 animate-spin text-purple-600 mx-auto" />
             <p className="mt-4 text-gray-600">Loading course data...</p>
           </div>
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (fetchError && !enrollmentsArray.length && !refreshing) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
           <h3 className="mt-4 text-lg font-medium text-gray-900">Error loading enrollments</h3>
@@ -322,13 +321,13 @@ const CourseEnrollments = () => {
             Try Again
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
   if (!currentCourse && !courseLoading && initialLoadDone) {
     return (
-      <Layout>
+      <>
         <div className="text-center py-12">
           <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
           <h3 className="mt-4 text-lg font-medium text-gray-900">Course not found</h3>
@@ -343,12 +342,12 @@ const CourseEnrollments = () => {
             Back to Courses
           </button>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -641,7 +640,7 @@ const CourseEnrollments = () => {
           loading={enrolling}
         />
       )}
-    </Layout>
+    </>
   );
 };
 

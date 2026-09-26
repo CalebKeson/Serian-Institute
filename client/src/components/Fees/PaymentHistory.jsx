@@ -28,7 +28,6 @@ import {
   TrendingUp,
   Hash
 } from 'lucide-react';
-import Layout from '../Layout/Layout';
 import { usePaymentStore } from '../../stores/paymentStore';
 import { useAuthStore } from '../../stores/authStore';
 import {
@@ -300,16 +299,16 @@ const PaymentHistory = () => {
 
   if (loading && !allPayments.length) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <Loader className="w-12 h-12 animate-spin text-green-600 mx-auto" />
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -464,7 +463,7 @@ const PaymentHistory = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 };
 

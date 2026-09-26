@@ -1,7 +1,6 @@
 // src/pages/Dashboard/Dashboard.jsx
 import React from 'react';
 import { useAuthStore } from '../../stores/authStore';
-import Layout from '../../components/Layout/Layout';
 import AdminDashboard from './AdminDashboard';
 import InstructorDashboard from './InstructorDashboard';
 
@@ -10,11 +9,11 @@ const Dashboard = () => {
   
   if (!user) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
-      </Layout>
+      </>
     );
   }
   
@@ -39,9 +38,9 @@ const Dashboard = () => {
   };
   
   return (
-    <Layout>
+    <>
       {renderDashboardContent()}
-    </Layout>
+    </>
   );
 };
 

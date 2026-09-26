@@ -1,4 +1,4 @@
-// src/App.jsx - UPDATED WITH CORRECT PATHS FOR ENQUIRY FILES
+// src/App.jsx - COMPLETE WITH CERTIFICATE VERIFICATION + USER MANAGEMENT ROUTES
 
 import React, { useEffect } from "react";
 import {
@@ -24,6 +24,10 @@ import ResetPassword from "./pages/Auth/ResetPassword";
 
 // Landing Page
 import LandingPage from "./pages/Landing/LandingPage";
+
+// Certificate Verification
+import VerificationSearch from "./pages/Verification/VerificationSearch";
+import CertificateVerification from "./pages/Verification/CertificateVerification";
 
 // Dashboard
 import Dashboard from "./pages/Dashboard/Dashboard";
@@ -103,7 +107,10 @@ import ReferrerManagement from "./pages/Referrals/ReferrerManagement";
 import Requests from "./pages/Requests/Requests";
 import RequestDetails from "./components/Requests/RequestDetails";
 
-// ============ ENQUIRY PAGES (Updated Paths) ============
+// User Management
+import Users from "./pages/Users/Users";
+
+// Enquiry Pages
 import EnquiryList from "./components/Enquiry/EnquiryList";
 import EnquiryAnalytics from "./components/Enquiry/EnquiryAnalytics";
 
@@ -111,47 +118,37 @@ import EnquiryAnalytics from "./components/Enquiry/EnquiryAnalytics";
 import Profile from "./pages/Profile/Profile";
 import Settings from "./pages/Settings/Settings";
 import Notifications from "./pages/Notifications/Notifications";
+import Layout from "./components/Layout/Layout";
+import PublicLayout from "./components/Layout/PublicLayout";
 
-// Scroll to Top Component
-const ScrollToTop = () => {
-  const { pathname } = useLocation();
-
-  useEffect(() => {
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: "instant"
-    });
-  }, [pathname]);
-
-  return null;
-};
-
-// Layout wrapper that includes ScrollToTop
+// Layout wrapper for protected routes (with Sidebar)
 const AppLayout = () => {
   return (
-    <>
-      <ScrollToTop />
+    <Layout>
       <Outlet />
-    </>
+    </Layout>
   );
 };
 
 // Protected Route component - redirects to login if not authenticated
 const ProtectedRoute = ({ children }) => {
   const user = useAuthStore((state) => state.user);
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
+
   return children;
 };
 
 // Public Route component - redirects to dashboard if already logged in
 const PublicRoute = ({ children }) => {
   const user = useAuthStore((state) => state.user);
+
   if (user) {
     return <Navigate to="/dashboard" replace />;
   }
+
   return children;
 };
 
@@ -175,10 +172,16 @@ const AppRouter = () => {
   const user = useAuthStore((state) => state.user);
 
   const { startPolling, stopPolling } = useNotificationStore();
-  const { startPolling: startRequestPolling, stopPolling: stopRequestPolling } =
-    useRequestStore();
-  const { startPolling: startStudentPolling, stopPolling: stopStudentPolling } =
-    useStudentStore();
+
+  const {
+    startPolling: startRequestPolling,
+    stopPolling: stopRequestPolling,
+  } = useRequestStore();
+
+  const {
+    startPolling: startStudentPolling,
+    stopPolling: stopStudentPolling,
+  } = useStudentStore();
 
   useEffect(() => {
     initialize();
@@ -209,639 +212,745 @@ const AppRouter = () => {
 
   const router = createBrowserRouter(
     createRoutesFromElements(
-      <Route element={<AppLayout />}>
-        {/* ============= PUBLIC ROUTES (No Authentication Required) ============= */}
-        
-        {/* Landing Page - Root path '/' */}
-        <Route
-          path="/"
-          element={
-            <PublicRoute>
-              <LandingPage />
-            </PublicRoute>
-          }
-        />
-        
-        {/* Auth Pages */}
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <Login />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <PublicRoute>
-              <Register />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/forgot-password"
-          element={
-            <PublicRoute>
-              <ForgotPassword />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/reset-password/:token"
-          element={
-            <PublicRoute>
-              <ResetPassword />
-            </PublicRoute>
-          }
-        />
+      <>
+        {/* ============================================================ */}
+        {/* PUBLIC ROUTES — Wrapped in PublicLayout (TopBar + Navbar)    */}
+        {/* ============================================================ */}
 
-        {/* ============= PROTECTED ROUTES (Authentication Required) ============= */}
-        
-        {/* Dashboard - Protected */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
+        <Route element={<PublicLayout />}>
+          {/* Landing Page */}
+          <Route
+            path="/"
+            element={
+              <PublicRoute>
+                <LandingPage />
+              </PublicRoute>
+            }
+          />
 
-        {/* ============= STUDENT MANAGEMENT ============= */}
-        <Route
-          path="/students"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "instructor", "receptionist"]}>
-                <Students />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/students/add"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "receptionist"]}>
-                <AddStudent />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/students/edit/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "receptionist"]}>
-                <EditStudent />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/students/:id"
-          element={
-            <ProtectedRoute>
-              <StudentProfile />
-            </ProtectedRoute>
-          }
-        />
+          {/* ======================================================== */}
+          {/* CERTIFICATE VERIFICATION                                 */}
+          {/* ======================================================== */}
 
-        {/* ============= COURSE MANAGEMENT ============= */}
-        <Route
-          path="/courses"
-          element={
-            <ProtectedRoute>
-              <Courses />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/courses/add"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "instructor"]}>
-                <AddCourse />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/courses/edit/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "instructor"]}>
-                <EditCourse />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/courses/:id"
-          element={
-            <ProtectedRoute>
-              <CourseDetails />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/courses/:id/enrollments"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "instructor", "receptionist"]}>
-                <CourseEnrollments />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/courses/:id/attendance"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "instructor"]}>
-                <CourseAttendance />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/attendance"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "instructor"]}>
-                <AttendanceCourseSelection />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          {/* Verification Search */}
+          <Route
+            path="/verify"
+            element={<VerificationSearch />}
+          />
 
-        {/* ============= INSTRUCTOR MANAGEMENT ============= */}
-        <Route
-          path="/instructors"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "receptionist"]}>
-                <Instructors />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/instructors/add"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <AddInstructor />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/instructors/edit/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <EditInstructor />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/instructors/:id"
-          element={
-            <ProtectedRoute>
-              <InstructorProfile />
-            </ProtectedRoute>
-          }
-        />
+          {/* Verification Result */}
+          <Route
+            path="/verify/:verificationId"
+            element={<CertificateVerification />}
+          />
 
-        {/* ============= INSTRUCTOR FEE VIEWS (READ-ONLY) ============= */}
-        <Route
-          path="/instructor/courses/:courseId/fees"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["instructor"]}>
-                <CourseFeeDetails />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/instructor/students/:studentId/fees"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["instructor"]}>
-                <StudentFeeDetails />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          {/* Auth Pages */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            }
+          />
 
-        {/* ============= EVENT MANAGEMENT ============= */}
-        <Route
-          path="/events"
-          element={
-            <ProtectedRoute>
-              <Events />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/events/add"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <AddEvent />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/events/edit/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <EditEvent />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/events/:id"
-          element={
-            <ProtectedRoute>
-              <EventDetails />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/register"
+            element={
+              <PublicRoute>
+                <Register />
+              </PublicRoute>
+            }
+          />
 
-        {/* ============= GRADES MANAGEMENT ============= */}
-        <Route
-          path="/grades"
-          element={
-            <ProtectedRoute>
-              <RoleRoute
-                allowedRoles={["admin", "instructor", "student", "parent"]}
-              >
-                <GradesOverview />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute>
+                <ForgotPassword />
+              </PublicRoute>
+            }
+          />
 
-        {/* ============= FEE MANAGEMENT ============= */}
-        <Route
-          path="/fees"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "receptionist"]}>
-                <Fees />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/fees/student/:studentId"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "receptionist"]}>
-                <StudentFees />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/fees/course/:courseId"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "receptionist"]}>
-                <CourseFees />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/fees/record-payment"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "receptionist"]}>
-                <RecordPayment />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/fees/history"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "receptionist"]}>
-                <PaymentHistory />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/fees/reports"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin", "receptionist"]}>
-                <FeeReports />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/reset-password/:token"
+            element={
+              <PublicRoute>
+                <ResetPassword />
+              </PublicRoute>
+            }
+          />
+        </Route>
 
-        {/* ============= FINANCIAL MODULE ============= */}
+        {/* ============================================================ */}
+        {/* PROTECTED ROUTES — Wrapped in AppLayout (Layout + Sidebar)   */}
+        {/* ============================================================ */}
 
-        {/* Financial Dashboard */}
-        <Route
-          path="/financial-dashboard"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <FinancialDashboard />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/financial/statements"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <FinancialStatements />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+        <Route element={<AppLayout />}>
+          {/* Dashboard - Protected */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Director Routes */}
-        <Route
-          path="/directors"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <Directors />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/directors/add"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <AddDirector />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/directors/edit/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <EditDirector />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/directors/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <DirectorDetails />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          {/* ============= STUDENT MANAGEMENT ============= */}
 
-        {/* Expense Routes */}
-        <Route
-          path="/expenses"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <Expenses />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/expenses/add"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <AddExpense />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/expenses/edit/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <EditExpense />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/expenses/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <ExpenseDetails />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/expenses/categories"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <ExpenseCategories />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/students"
+            element={
+              <ProtectedRoute>
+                <RoleRoute
+                  allowedRoles={["admin", "instructor", "receptionist"]}
+                >
+                  <Students />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Income Routes */}
-        <Route
-          path="/income"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <Income />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/income/record"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <RecordIncome />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/income/edit/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <EditIncome />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/income/:id"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <IncomeDetails />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/students/add"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "receptionist"]}>
+                  <AddStudent />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Financial Report Routes */}
-        <Route
-          path="/financial/profit-loss"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <ProfitLoss />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/financial/cash-flow"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <CashFlow />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/financial/budget-vs-actual"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <BudgetVsActual />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/students/edit/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "receptionist"]}>
+                  <EditStudent />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
 
-        {/* ============= REFERRAL ROUTES ============= */}
-        <Route
-          path="/referral-report"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <ReferralReport />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/referrers"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <ReferrerManagement />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/students/:id"
+            element={
+              <ProtectedRoute>
+                <StudentProfile />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* ============= ENQUIRY ROUTES ============= */}
-        <Route
-          path="/enquiries"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <EnquiryList />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/enquiry-analytics"
-          element={
-            <ProtectedRoute>
-              <RoleRoute allowedRoles={["admin"]}>
-                <EnquiryAnalytics />
-              </RoleRoute>
-            </ProtectedRoute>
-          }
-        />
+          {/* ============= COURSE MANAGEMENT ============= */}
 
-        {/* ============= REQUEST MANAGEMENT ============= */}
-        <Route
-          path="/requests"
-          element={
-            <ProtectedRoute>
-              <Requests />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/requests/:id"
-          element={
-            <ProtectedRoute>
-              <RequestDetails />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/courses"
+            element={
+              <ProtectedRoute>
+                <Courses />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* ============= USER PROFILE & SETTINGS ============= */}
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/notifications"
-          element={
-            <ProtectedRoute>
-              <Notifications />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/courses/add"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "instructor"]}>
+                  <AddCourse />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
 
-        {/* ============= DEFAULT REDIRECTS ============= */}
-        {/* Any unknown routes go to landing page */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>,
+          <Route
+            path="/courses/edit/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "instructor"]}>
+                  <EditCourse />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/courses/:id"
+            element={
+              <ProtectedRoute>
+                <CourseDetails />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/courses/:id/enrollments"
+            element={
+              <ProtectedRoute>
+                <RoleRoute
+                  allowedRoles={["admin", "instructor", "receptionist"]}
+                >
+                  <CourseEnrollments />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/courses/:id/attendance"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "instructor"]}>
+                  <CourseAttendance />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/attendance"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "instructor"]}>
+                  <AttendanceCourseSelection />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= INSTRUCTOR MANAGEMENT ============= */}
+
+          <Route
+            path="/instructors"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "receptionist"]}>
+                  <Instructors />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/instructors/add"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <AddInstructor />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/instructors/edit/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <EditInstructor />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/instructors/:id"
+            element={
+              <ProtectedRoute>
+                <InstructorProfile />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= INSTRUCTOR FEE VIEWS (READ-ONLY) ============= */}
+
+          <Route
+            path="/instructor/courses/:courseId/fees"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["instructor"]}>
+                  <CourseFeeDetails />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/instructor/students/:studentId/fees"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["instructor"]}>
+                  <StudentFeeDetails />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= EVENT MANAGEMENT ============= */}
+
+          <Route
+            path="/events"
+            element={
+              <ProtectedRoute>
+                <Events />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/events/add"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <AddEvent />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/events/edit/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <EditEvent />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/events/:id"
+            element={
+              <ProtectedRoute>
+                <EventDetails />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= GRADES MANAGEMENT ============= */}
+
+          <Route
+            path="/grades"
+            element={
+              <ProtectedRoute>
+                <RoleRoute
+                  allowedRoles={[
+                    "admin",
+                    "instructor",
+                    "student",
+                    "parent",
+                  ]}
+                >
+                  <GradesOverview />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= FEE MANAGEMENT ============= */}
+
+          <Route
+            path="/fees"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "receptionist"]}>
+                  <Fees />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/fees/student/:studentId"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "receptionist"]}>
+                  <StudentFees />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/fees/course/:courseId"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "receptionist"]}>
+                  <CourseFees />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/fees/record-payment"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "receptionist"]}>
+                  <RecordPayment />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/fees/history"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "receptionist"]}>
+                  <PaymentHistory />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/fees/reports"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin", "receptionist"]}>
+                  <FeeReports />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= FINANCIAL MODULE ============= */}
+
+          <Route
+            path="/financial-dashboard"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <FinancialDashboard />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/financial/statements"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <FinancialStatements />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Director Routes */}
+
+          <Route
+            path="/directors"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <Directors />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/directors/add"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <AddDirector />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/directors/edit/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <EditDirector />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/directors/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <DirectorDetails />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Expense Routes */}
+
+          <Route
+            path="/expenses"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <Expenses />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/expenses/add"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <AddExpense />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/expenses/edit/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <EditExpense />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/expenses/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <ExpenseDetails />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/expenses/categories"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <ExpenseCategories />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Income Routes */}
+
+          <Route
+            path="/income"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <Income />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/income/record"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <RecordIncome />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/income/edit/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <EditIncome />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/income/:id"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <IncomeDetails />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Financial Report Routes */}
+
+          <Route
+            path="/financial/profit-loss"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <ProfitLoss />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/financial/cash-flow"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <CashFlow />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/financial/budget-vs-actual"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <BudgetVsActual />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= REFERRAL ROUTES ============= */}
+
+          <Route
+            path="/referral-report"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <ReferralReport />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/referrers"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <ReferrerManagement />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= ENQUIRY ROUTES ============= */}
+
+          <Route
+            path="/enquiries"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <EnquiryList />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/enquiry-analytics"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <EnquiryAnalytics />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= REQUEST MANAGEMENT ============= */}
+
+          <Route
+            path="/requests"
+            element={
+              <ProtectedRoute>
+                <Requests />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/requests/:id"
+            element={
+              <ProtectedRoute>
+                <RequestDetails />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= USER MANAGEMENT ============= */}
+
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute>
+                <RoleRoute allowedRoles={["admin"]}>
+                  <Users />
+                </RoleRoute>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= USER PROFILE & SETTINGS ============= */}
+
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <Notifications />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ============= DEFAULT REDIRECTS ============= */}
+
+          <Route
+            path="*"
+            element={<Navigate to="/" replace />}
+          />
+        </Route>
+      </>
     ),
   );
 
   return (
     <>
       <RouterProvider router={router} />
+
       <Toaster
         position="top-right"
         toastOptions={{

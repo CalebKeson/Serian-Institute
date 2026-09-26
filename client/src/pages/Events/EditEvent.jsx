@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ArrowLeft, Save, X, Calendar as CalendarIcon } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
 import { formatDateForInput, formatTime } from '../../utils/calendarUtils';
@@ -139,16 +138,16 @@ const EditEvent = () => {
   
   if (loading && !currentEvent) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
-      </Layout>
+      </>
     );
   }
   
   return (
-    <Layout>
+    <>
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -433,7 +432,7 @@ const EditEvent = () => {
           </form>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

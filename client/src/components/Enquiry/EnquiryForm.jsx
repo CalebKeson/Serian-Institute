@@ -1,4 +1,3 @@
-// components/Enquiry/EnquiryForm.jsx - COMPLETE NEW FILE
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -47,7 +46,6 @@ const EnquiryForm = ({
     const utmMedium = localStorage.getItem('utmMedium') || '';
     const utmCampaign = localStorage.getItem('utmCampaign') || '';
     
-    // Store source data in form state for submission
     setFormData(prev => ({
       ...prev,
       source,
@@ -57,6 +55,7 @@ const EnquiryForm = ({
     }));
   }, []);
 
+  // FIXED: Updated enquiry types with correct enum values that match the backend
   const enquiryTypes = [
     { value: 'course_inquiry', label: 'Course Inquiry', icon: BookOpen },
     { value: 'admission_inquiry', label: 'Admission Inquiry', icon: User },
@@ -96,7 +95,6 @@ const EnquiryForm = ({
       }));
     }
 
-    // Clear error when field is touched
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -176,6 +174,12 @@ const EnquiryForm = ({
     // Prepare data for submission
     const submissionData = {
       ...formData,
+      // FIXED: Map enquiryType to the backend's expected format
+      // The backend expects 'purpose' to be one of: 'Admission Inquiry', 'Fee Payment', etc.
+      // So we need to map the enquiryType to the correct purpose value
+      purpose: mapEnquiryTypeToPurpose(formData.enquiryType),
+      // Also send the original enquiryType for reference
+      enquiryType: formData.enquiryType,
       // Get visitor ID from localStorage
       visitorId: localStorage.getItem('visitorId') || null,
       sessionId: sessionStorage.getItem('sessionId') || null,
@@ -187,6 +191,20 @@ const EnquiryForm = ({
     };
 
     onSubmit(submissionData);
+  };
+
+  // FIXED: Map enquiryType to the correct purpose value for the backend
+  const mapEnquiryTypeToPurpose = (enquiryType) => {
+    const mapping = {
+      'course_inquiry': 'Admission Inquiry',
+      'admission_inquiry': 'Admission Inquiry',
+      'fee_inquiry': 'Fee Payment',
+      'general_inquiry': 'Other',
+      'complaint': 'Complaint',
+      'feedback': 'Other',
+      'other': 'Other'
+    };
+    return mapping[enquiryType] || 'Other';
   };
 
   if (success) {
@@ -315,7 +333,7 @@ const EnquiryForm = ({
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Enquiry Type *
         </label>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {enquiryTypes.map((type) => {
             const Icon = type.icon;
             const isSelected = formData.enquiryType === type.value;

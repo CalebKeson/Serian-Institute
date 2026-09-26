@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Calendar as CalendarIcon, List, Plus, RefreshCw } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import EventCard from '../../components/Events/EventCard';
 import EventFilters from '../../components/Events/EventFilters';
 import EventCalendar from '../../components/Events/EventCalendar';
@@ -82,7 +81,7 @@ const Events = () => {
   };
   
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -283,7 +282,7 @@ const Events = () => {
           onViewDetails={handleViewDetails}
         />
       )}
-    </Layout>
+    </>
   );
 };
 

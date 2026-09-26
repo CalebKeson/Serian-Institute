@@ -21,7 +21,6 @@ import {
   Mail,
   Phone
 } from 'lucide-react';
-import Layout from '../Layout/Layout';
 import { usePaymentStore } from '../../stores/paymentStore';
 import { useStudentStore } from '../../stores/studentStore';
 import { useCourseStore } from '../../stores/courseStore';
@@ -348,19 +347,19 @@ const RecordPayment = () => {
   // Show loading state only during initial data load
   if (!dataLoaded) {
     return (
-      <Layout>
+      <>
         <div className="flex items-center justify-center min-h-96">
           <div className="text-center">
             <Loader className="w-12 h-12 animate-spin text-green-600 mx-auto mb-4" />
             <p className="text-gray-600">Loading data...</p>
           </div>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -859,7 +858,7 @@ const RecordPayment = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

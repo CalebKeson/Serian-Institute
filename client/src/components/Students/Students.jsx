@@ -226,7 +226,7 @@ const Students = () => {
   };
 
   return (
-    <Layout>
+    <>
       {/* Header Section */}
       <div className="mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -455,7 +455,7 @@ const Students = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 };
 

@@ -4,19 +4,20 @@ import cors from "cors";
 import connectDB from "./config/database.js";
 
 // Existing routes
-import authRoutes from './routes/auth.route.js';
-import studentRoutes from './routes/student.route.js';
+import authRoutes from './routes/auth.route.js'; 
+import studentRoutes from './routes/student.route.js'; 
 import instructorRoutes from './routes/instructor.route.js';
 import courseRoutes from './routes/course.route.js';
-import enrollmentRoutes from './routes/enrollment.route.js';
-import attendanceRoutes from './routes/attendance.route.js';
+import enrollmentRoutes from './routes/enrollment.route.js';  
+import attendanceRoutes from './routes/attendance.route.js';  
 import requestRoutes from './routes/request.route.js';
-import notificationRoutes from './routes/notification.route.js';
+import notificationRoutes from './routes/notification.route.js'; 
 import gradeRoutes from './routes/grades.route.js';
-import paymentRoutes from './routes/payment.route.js';
+import paymentRoutes from './routes/payment.route.js'; 
 import dashboardRoutes from './routes/dashboard.route.js';
 import reportsRoutes from './routes/reports.route.js';
 import eventRoutes from './routes/event.route.js';
+import userRoutes from './routes/user.route.js'; 
 
 // Income & Expense routes
 import incomeSourceRoutes from './routes/incomeSource.route.js'; 
@@ -83,7 +84,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Basic route
+// Basic route 
 app.get("/", (req, res) => {
   res.json({
     message: "Serian Management API is running!",
@@ -128,10 +129,10 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/reports', reportsRoutes);
+app.use('/api/reports', reportsRoutes); 
 app.use('/api/events', eventRoutes);
-
-// ==================== INCOME & EXPENSE ROUTES ====================
+app.use('/api/users', userRoutes);
+// ==================== INCOME & EXPENSE ROUTES ==================== 
 app.use('/api/income-sources', incomeSourceRoutes);
 app.use('/api/income', incomeTransactionRoutes);
 app.use('/api/directors', directorRoutes);

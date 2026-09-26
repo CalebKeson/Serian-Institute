@@ -22,7 +22,6 @@ import {
   Plus,
   X
 } from 'lucide-react';
-import Layout from '../../components/Layout/Layout';
 import { useDirectorStore } from '../../stores/directorStore';
 import { useAuthStore } from '../../stores/authStore';
 import DirectorTable from '../../components/Directors/DirectorTable';
@@ -161,7 +160,7 @@ const Directors = () => {
   const activeFilterCount = (filters.search ? 1 : 0) + (filters.isActive !== undefined && filters.isActive !== true ? 1 : 0);
 
   return (
-    <Layout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -350,7 +349,7 @@ const Directors = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 
