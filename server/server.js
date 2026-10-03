@@ -84,7 +84,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Basic route 
+// Basic route  
 app.get("/", (req, res) => {
   res.json({
     message: "Serian Management API is running!",
